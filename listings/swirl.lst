@@ -1,0 +1,683 @@
+  
+
+                ;       SWIRL DRAWING DEMONSTRATION FOR THE MICRO TECHNOLOGY UNLIMITED
+                ;       VISIBLE MEMORY 320 BY 200 PIXEL DISPLAY
+
+                ;       ENTER AT SWIRL WITH LINES, FREQ, AND DAMP SET TO APPROPRIATE
+                ;       VALUES TO GENERATE AN SWIRLING DISPLAY. INTERRUPT WITH RESET
+                ;       KEY WHEN PATTERN IS COMPLETED TO DESIRED EXTENT.
+
+                ;       ENTER AT RSWIRL FOR AN ENDLESS SERIES OF PATTERNS USING
+                ;       RANDOMLY SELECTED PARAMETERS.
+
+                ;       GENERAL EQUATES
+
+1C22            KIMMON  =       X'1C22      ; RESET ENTRY INTO KIM MONITOR
+0140            NX      =       320         ; NUMBER OF BITS IN A ROW
+00C8            NY      =       200         ; NUMBER OF ROWS (CHANGE FOR HALF SCREEN
+
+FA00            NPIX    =       NX*NY       ; NUMBER OF PIXELS
+     
+0000                    .=      0           ; START PROGRAM AT ZERO
+    
+                ;       STORAGE FOR SWIRL GENERATOR PROGRAM
+    
+0000 01         LINES:  .BYTE   1           ; CONNECTING LINES IF NON-ZERO
+0001 127E       FREQ:   .WORD   X'7E12      ; FREQUENCY
+0003 007E       DAMP:   .WORD   X'7E00      ; 1-(DAMPING FACTOR)
+0005 0078       COSINT: .WORD   X'7800      ; INITIAL COSINE VALUE
+                                            ; GOOD VALUE FOR GENERAL USE BUT SHOULD BE
+                                            ; REDUCED TO X'70 TO PREVENT OVERFLOW WITH
+                                            ; RANDOMLY SELECTED PARAMETERS
+0007            COS:    .=.+    2           ; COSINE VALUE
+0009            SIN:    .=.+    2           ; SINE VALUE
+
+                ;       GENERAL STORAGE
+
+000B 20         VMORG:  .BYTE   X'20        ; PAGE NUMBER OF FIRST VISIBLE MEMORY
+                                            ; LOCATION
+000C 3412       RANDNO: .WORD   X'1234      ; INITIAL RANDON NUMBER, MUST NOT BE ZERO
+000E            ADP1:   .=.+    2           ; ADDRESS POINTER 1
+0010            ADP2:   .=.+    2           ; ADDRESS POINTER 2
+0012            BTPT:   .=.+    1           ; BIT NUMBER
+0013            X1CORD: .=.+    2           ; COORDINATE PAIR 1
+0015            Y1CORD: .=.+    2
+0017            X2CORD: .=.+    2           ; COORDINATE PAIR 2
+0019            Y2CORD: .=.+    2
+ 
+                ;       STORAGE FOR ARBITRARY LINE DRAW ROUTINE
+ 
+001B            DELTAX: .=.+    2           ; DELTA X
+001D            DELTAY: .=.+    2           ; DELTA Y
+001F            ACC:    .=.+    2           ; ACCUMULATOR
+0021            XDIR:   .=.+    1           ; X MOVEMENT DIRECTION, ZERO=+
+0022            YDIR:   .=.+    1           ; Y MOVEMENT DIRECTION, ZERO=+
+0023            XCHFLG: .=.+    1           ; EXCHANGE X AND Y FLAG, EXCHANGE IF NOT O
+0024            COLOR:  .=.+    1           ; COLOR OF LINE DRAWN -1=WHITE
+0025            TEMP:   .=.+    2           ; TEMPORARY STORAGE
+
+                ;       STORAGE FOR THE ARITHMETIC SUBROUTINES
+
+0027            PROD:   .=.+    4           ; PRODUCT FOR ARITHMETIC ROUTINES
+002B            MPCD:   .=.+    2           ; MUPTIPLICAND FOR ARITHMETIC
+002D            MPLR    =       PROD        ; MULTIPLIER FOR ARITHMETIC ROUTINES
+002D            MPSAVE: .=.+    2           ; TEMPORARY STORAGE FOR MULTIPLY
+
+                ;       SWIRL ROUTINE FOR STRAIGHT LINES CONNECTING THE POINTS
+
+002F 208D00     SWIRL:  JSR     SWINIT      ; INITIALIZE COS AND SIN
+0032 20A500     SWIRL1: JSR     SCALE       ; SCALE SIN AND COS FOR DISPLAY
+0035 A500               LDA     LINES       ; TEST IF LINES BETWEEN POINTS DESIRED
+0037 D003               BNE     SWIRL2      ; SKIP IF SO
+0039 205D01             JSR     C2TOC1      ; IF NOT, SET LINE LENGTH TO ZERO
+003C 202202     SWIRL2: JSR     DRAW        ; DRAW THE LINE OR POINT
+003F 200001             JSR     POINT       ; COMPUTE THE NEXT POINT
+0042 4C3200             JMP     SWIRL1
+
+                ;       SWIRL ROUTINE WITH RANDOM PARAMETERS
+
+0045 208D00     RSWIRL: JSR     SWINIT      ; INITIALIZE COS AND SIN
+0048 209503     RSWR1:  JSR     RAND        ; INITIALIZE FREQ RANDOMLY WITH UNIFORM
+004B 8501               STA     FREQ        ; DISTRIBUTION
+004D 209503             JSR     RAND
+0050 8502               STA     FREQ+1
+0052 20B103             JSR     RNDEXP      ; INITIALIZE DAMP RANDOMLY WITH A NEGATIVE
+0055 4A                 LSRA                ; EXPONENTIAL DISTRIBUTION
+0056 497F               EOR     #X'7F       ; IN THE UPPER BYTE AND UNIFORM
+0058 8504               STA     DAMP+1      ; DISTRIBUTION IN THE LOWER BYTE
+005A 209503             JSR     RAND
+005D 8503               STA     DAMP
+005F 209503             JSR     RAND        ; RANDOMLY DETERMINE PRESENCE OF
+0062 2901               AND     #1          ; CONNECTING LINES
+0064 8500               STA     LINES
+0066 20CB03             JSR     RANGCK      ; VERIFY ACCEPTABLE RANGES OF PARAMETERS
+0069 B0DD               BCS     RSWR1       ; TRY AGAIN IF NOT ACCEPTABLE
+006B 20A500     RSWR2:  JSR     SCALE       ; SCALE THE CURRENT POINT FOR PLOTTING
+006E A500               LDA     LINES       ; TEST IF CONNECTING LINES SPECIFIED
+0070 D003               BNE     RSWR3       ; SKIP AHEAD IF SO
+0072 205D01             JSR     C2TOC1      ; IF NOT, SET ZERO LINE LENGTH
+0075 202202     RSWR3:  JSR     DRAW        ; ORAW A LINE FROM THE LAST POINT PLOTTED
+0078 200001             JSR     POINT       ; COMPUTE THE NEXT POINT
+007B A50A       RSWR4:  LDA     SIN+1       ; TEST IF PATTERN HAS DECAYED TO NEARLY
+007D F004               BEQ     RSWR5       ; ZERO
+007F C9FF               CMP     #X'FF
+0081 D0E8               BNE     RSWR2
+0083 A508       RSWR5:  LDA     COS+1
+0085 F0BE               BEQ     RSWIRL      ; GO START A NEW PATTERN IF SO
+0087 C9FF               CMP     #X'FF
+0089 F0BA               BEQ     RSWIRL
+008B D0DE               BNE     RSWR2       ; GO COMPUTE NEXT POINT IF NOT
+
+                ;       SWINIT - INITIALIZE COS FROM COSINT, ZERO SIN, CLEAR SCREEN
+
+008D A505       SWINIT: LDA     COSINT      ; INITIALIZE COS
+008F 8507               STA     COS
+0091 A506               LDA     COSINT+1
+0093 8508               STA     COS+1
+0095 A900               LDA     #0          ; ZERO SIN
+0097 8509               STA     SIN
+0099 850A               STA     SIN+1
+009B 200002             JSR     CLEAR       ; CLEAR THE VM SCREEN
+009E 20A500             JSR     SCALE       ; SCALE THE INITIAL POINT AND PUT INTO
+00A1 205D01             JSR     C2TOC1      ; IN BOTH SETS OF COORDINATES
+00A4 60                 RTS                 ; RETURN
+
+                ;       SCALE - TAKE VALUE OF SIN, SCALE ACCORDING TO NX, AND PUT INTO
+                ;       X2CORD. THEN TAKE VALUE OF COS, SCALE ACCORDING TO NY, AND
+                ;       PUT INTO Y2CORD.
+                ;       SIN AND COS ARE ASSUMED TO BE DOUBLE LENGTH BINARY FRACTIONS
+                ;       BETWEEN -1 AND +1.
+
+00A5 A507       SCALE:  LDA     COS         ; X2CORD=NX/2*SIN4NX/2
+00A7 852B               STA     MPCD        ; TRANSFER SIN TO MULTIPLICAND
+00A9 A508               LDA     COS+1       ; (BINARY FRACTION)
+00AB 852C               STA     MPCD+1
+00AD A9A0               LDA     #NX/2&X'FF  ; TRANSFER NX/2 TO MULTIPLIER
+00AF 8527               STA     MPLR        ; (INTEGER)
+00B1 A900               LDA     #NX/2/256
+00B3 8528               STA     MPLR+1
+00B5 202B03             JSR     SGNMPY      ; PERFORM A SIGNED MULTIPLICATION
+00B8 208B03             JSR     SLQL
+00BB A529               LDA     PROD+2      ; SIGNED INTEGER RESULT IN PROD+2 (LOW)
+00BD 18                 CLC                 ; AND PROD+3 (HIGH)
+00BE 69A0               ADC     #NX/2&X'FF  ; ADD NX/2 TO PRODUCT AND PUT INTO X2CORD
+00C0 8517               STA     X2CORD
+00C2 A52A               LDA     PROD+3
+00C4 6900               ADC     #NX/2/256
+00C6 8518               STA     X2CORD+1
+
+00C8 A509               LDA     SIN         ; Y2CORD=NY/2*COS+NX/2
+00CA 852B               STA     MPCD        ; TRANSFER COS TO MULTIPLICAND
+00CC A50A               LDA     SIN+1       ; (BINARY FRACTION)
+00CE 852C               STA     MPCD+1
+00D0 A964               LDA     #NY/2&X'FF  ; TRANSFER NY/2 TO MULTIPLIER
+00D2 8527               STA     MPLR        ; (INTEGER)
+00D4 A900               LDA     #NY/2/256
+00D6 8528               STA     MPLR+1
+00D8 202B03             JSR     SGNMPY      ; PERFORM A SIGNED MULTIPLICATION
+00DB 208B03             JSR     SLQL
+00DE A529               LDA     PROD+2      ; SIGNED INTEGER RESULT IN PROD+2 (LOW)
+00E0 18                 CLC                 ; AND PROD+3 (HIGH)
+00E1 6964               ADC     #NY/2&X'FF  ; ADD NY/2 TO PRODUCT AND PUT INTO Y2CORD
+00E3 8519               STA     Y2CORD
+00E5 A52A               LDA     PROD+3
+00E7 6900               ADC     #NY/2/256
+00E9 851A               STA     Y2CORD+1
+00EB 60                 RTS                 ; RETURN
+
+                ;       POINT - COMPUTE NEXT VALUE OF COS,SIN FROM CURRENT VALUE OF
+                ;       COS,SIN ACCORDING TO FREQ AND DAMP. DIFFERENCE EQUATION FOR
+                ;       AN ELIPSE IS USED
+
+00EC                    .=      X'100
+
+0100 A509       POINT:  LDA     SIN         ; FIRST COMPUTE DAMP*SIN AND PUT INTO SIN
+0102 852B               STA     MPCD
+0104 A50A               LDA     SIN+1
+0106 852C               STA     MPCD+1
+0108 A503               LDA     DAMP
+010A 8527               STA     MPLR
+010C A504               LDA     DAMP+1
+010E 8528               STA     MPLR+1
+0110 202B03             JSR     SGNMPY
+0113 208B03             JSR     SLQL        ; SHIFT PRODUCT LEFT ONE FOR FRACTIONAL
+0116 A529               LDA     PROD+2      ; RESULT
+0118 8509               STA     SIN         ; AND PUT BACK INTO SIN
+011A A52A               LDA     PROD+3
+011C 850A               STA     SIN+1
+           
+011E A507               LDA     COS         ; NEXT COMPUTE COS*FREQ
+0120 8527               STA     MPLR
+0122 A508               LDA     COS+1
+0124 8528               STA     MPLR+1
+0126 A501               LDA     FREQ
+0128 852B               STA     MPCD
+012A A502               LDA     FREQ+1
+012C 852C               STA     MPCD+1
+012E 202B03             JSR     SGNMPY
+0131 208B03             JSR     SLQL
+0134 A509               LDA     SIN         ; ADD RESULT TO SIN AND PUT SUM BACK INTO
+0136 18                 CLC                 ; SIN
+0137 6529               ADC     PROD+2
+0139 8509               STA     SIN
+013B A50A               LDA     SIN+1
+013D 652A               ADC     PROD+3
+013F 850A               STA     SIN+1
+
+0141 A509               LDA     SIN         ; NEXT COMPUTE FREQ*SIN
+0143 8527               STA     MPLR
+0145 A50A               LDA     SIN+1
+0147 8528               STA     MPLR+1      ; FREQ ALREADY IN MPCD
+0149 202B03             JSR     SGNMPY
+014C 208B03             JSR     SLQL
+
+014F A507               LDA     COS         ; SUBSTRACT RESULT FROM COS AND PUT RESULT
+0151 38                 SEC                 ; IN COS
+0152 E529               SBC     PROD+2
+0154 8507               STA     COS
+0156 A508               LDA     COS+1
+0158 E52A               SBC     PROD+3
+015A 8508               STA     COS+1
+015C 60                 RTS                 ; RETURN
+           
+                ;       SUBROUTINE TO MOVE THE CONTENTS OF COORDINATE PAIR 2 TO
+                ;       COORDINATE PAIR 1.
+
+015D A517       C2TOC1: LDA     X2CORD      ; DO THE MOVING
+015F 8513               STA     X1CORD
+0161 A518               LDA     X2CORD+1
+0163 8514               STA     X1CORD+1
+0165 A519               LDA     Y2CORD
+0167 8515               STA     Y1CORD
+0169 A51A               LDA     Y2CORD+1
+016B 8516               STA     Y1CORD+1
+016D 60                 RTS                 ; RETURN
+
+                ;       PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
+                ;                X1CORD, Y1CORD
+                ;       PUTS BYTE ADDRESS IN ADP1 AND BIT NUMBER (BIT 0 IS LEFTMOST)
+                ;       IN BTPT.
+                ;       DOES NOT CHECK MAGNITUDE OF COORDINATES FOR MAXIMUM SPEED
+                ;       PRESERVES X AND Y REGISTERS, DESTROYS A
+                ;       BYTE ADDRESS = VMORG*256+(199-Y1CORD)*40+INT(XCORD/8)
+                ;       BIT ADDRESS = REM(XCORD/8)
+                ;       OPTIMIZED FOR SPEED THEREFORE CALLS TO A DOUBLE SHIFT ROUTINE
+                ;       ARE NOT DONE
+
+016E A513       PIXADR: LDA     X1CORD      ; COMPUTE BIT ADDRESS FIRST
+0170 850E               STA     ADP1        ; ALSO TRANSFER X1CORD TO ADP1
+0172 2907               AND     #X'07       ; WHICH IS SIMPLY THE LOW 3 BITS OF X
+0174 8512               STA     BTPT
+0176 A514               LDA     X1CORD+1    ; FINISH TRANSFERRING X1CORD TO ADP1
+0178 850F               STA     ADP1+1
+017A 460F               LSR     ADP1+1      ; DOUBLE SHIFT ADP1 RIGHT 3 TO GET
+017C 660E               ROR     ADP1        ; INT(XCORD/8)
+017E 460F               LSR     ADP1+1
+0180 660E               ROR     ADP1
+0182 460F               LSR     ADP1+1
+0184 660E               ROR     ADP1
+0186 A9C7               LDA     #199        ; TRANSFER (199-Y1CORD) TO ADP2
+0188 38                 SEC                 ; AND TEMPORARY STORAGE
+0189 E515               SBC     Y1CORD
+018B 8510               STA     ADP2
+018D 8525               STA     TEMP
+018F A900               LDA     #0
+0191 E516               SBC     Y1CORD+1
+0193 8511               STA     ADP2+1
+0195 8526               STA     TEMP+1
+0197 0610               ASL     ADP2        ; COMPUTE 40*(199-Y1CORD)
+0199 2611               ROL     ADP2+1      ;  2*(199-Y1CORD)
+019B 0610               ASL     ADP2
+019D 2611               ROL     ADP2+1      ;  4*(199+Y1CORD)
+019F A510               LDA     ADP2        ;  ADD IN TEMPORARY SAVE OF (199-Y1CORD)
+01A1 18                 CLC                 ;  TO MAKE 5*(199-Y1CORD)
+01A2 6525               ADC     TEMP
+01A4 8510               STA     ADP2
+01A6 A511               LDA     ADP2+1
+01A8 6526               ADC     TEMP+1
+01AA 8511               STA     ADP2+1      ;  5*(199-Y1CORD)
+01AC 0610               ASL     ADP2        ;  10*(199-Y1CORD)
+01AE 2611               ROL     ADP2+1
+01B0 0610               ASL     ADP2        ;  20*(199-Y1CORD)
+01B2 2611               ROL     ADP2+1
+01B4 0610               ASL     ADP2        ;  40*(199-Y1CORD)
+01B6 2611               ROL     ADP2+1
+01B8 A510               LDA     ADP2        ; ADD IN INT(X1CORD/8) COMPUTED EARLIER
+01BA 18                 CLC
+01BB 650E               ADC     ADP1
+01BD 850E               STA     ADP1
+01BF A511               LDA     ADP2+1
+01C1 650F               ADC     ADP1+1
+01C3 650B               ADC     VMORG       ; ADD IN VMORG*256
+01C5 850F               STA     ADP1+1      ; FINAL RESULT
+01C7 60                 RTS                 ; RETURN
+
+                ;       STPIX - SETS THE PIXEL AT X1CORD,Y1CORD TO A ONE (WHITE DOT)
+                ;       DOES NOT ALTER X1CORD OR Y1CORD
+                ;       PRESERVES X AND Y
+                ;       ASSUMES IN RANGE CORRDINATES
+
+01C8 206E01     STPIX:  JSR     PIXADR      ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+                                            ; INTO ADP1
+01CB 98                 TYA                 ; SAVE Y
+01CC 48                 PHA
+01CD A412               LDY     BTPT        ; GET BIT NUMBER IN Y
+01CF B91A02             LDA     MSKTB1,Y    ; GET A BYTE WITH THAT BIT =1, OTHERS =0
+01D2 A000               LDY     #0          ; ZERO Y
+01D4 110E               ORA     (ADP1),Y    ; COMBINE THE BIT WITH THE ADDRESSED VM
+01D6 910E               STA     (ADP1),Y    ; BYTE
+01D8 68                 PLA                 ; RESTORE Y
+01D9 A8                 TAY
+01DA 60                 RTS                 ; AND RETURN
+           
+01DB                    .=      X'200
+
+                ;       CLEAR DISPLAY MEMORY ROUTINE
+
+0200 A000       CLEAR:  LDY     #0          ; INITIALIZE ADDRESS POINTER
+0202 840E               STY     ADP1        ; AND ZERO INDEX Y
+0204 A50B               LDA     VMORG
+0206 850F               STA     ADP1+1
+0208 18                 CLC
+0209 6920               ADC     #X'20
+020B AA                 TAX
+020C 98         CLEAR1: TYA                 ; CLEAR A BYTE
+020D 910E               STA     (ADP1),Y
+020F E60E               INC     ADP1        ; INCREMENT ADDRESS POINTER
+0211 D0F9               BNE     CLEAR1
+0213 E60F               INC     ADP1+1
+0215 E40F               CPX     ADP1+1      ; TEST IF DONE
+0217 D0F3               BNE     CLEAR1
+0219 60                 RTS                 ; RETURN
+
+                ;       MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
+                ;       MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
+
+021A 804020 10  MSKTB1: .BYTE   X'80,X'40,X'20,X'10
+021E 080402 01          .BYTE   X'08,X'04,X'02,X'01
+
+                ;       DRAW - DRAW THE BEST STRAIGHT LINE FROM X1CORD,Y1CORD TO
+                ;       X2CORD, Y2CORD.
+                ;       X2CORD,Y2CORD COPIED TO X1CORD,Y1CORD AFTER DRAWING
+                ;       PRESERVES X AND Y
+                ;       USES AN ALGORITHM THAT REQUIRES NO MULTIPLICATION OR DIVISON
+
+0222 8A         DRAW:   TXA                 ; SAVE X AND Y
+0223 48                 PHA
+0224 98                 TYA
+0225 48                 PHA
+
+                ;       COMPUTE SIGN AND MAGNITUDE OF DELTA X = X2-X1
+                ;       PUT MAGNITUDE IN DELTAX AND SIGN IN XDIR
+
+0226 A900               LDA     #0          ; FIRST ZERO XDIR
+0228 8521               STA     XDIR
+022A A517               LDA     X2CORD      ; NEXT COMPUTE TWOS COMPLEMENT DIFFERENCE
+022C 38                 SEC
+022D E513               SBC     X1CORD
+022F 851B               STA     DELTAX
+0231 A518               LDA     X2CORD+1
+0233 E514               SBC     X1CORD+1
+0235 851C               STA     DELTAX+1
+0237 100F               BPL     DRAW2       ; SKIP AHEAD IF DIFFERENCE IS POSITIVE
+0239 C621               DEC     XDIR        ; SET XDIR TO -1
+023B 38                 SEC                 ; NEGATE DELTAX
+023C A900               LDA     #0
+023E E51B               SBC     DELTAX
+0240 851B               STA     DELTAX
+0242 A900               LDA     #0
+0244 E51C               SBC     DELTAX+1
+0246 851C               STA     DELTAX+1
+
+                ;       COMPUTE SIGN AND MAGNITUDE OF DELTA Y = Y2-Y1
+                ;       PUT MAGNITUDE IN DELTAY AND SIGN IN YDIR    
+
+0248 A900       DRAW2:  LDA     #0          ; FIRST ZERO YDIR
+024A 8522               STA     YDIR
+024C A519               LDA     Y2CORD      ; NEXT COMPUTE TWOS COMPLEMENT DIFFERENCE
+024E 38                 SEC
+024F E515               SBC     Y1CORD
+0251 851D               STA     DELTAY
+0253 A51A               LDA     Y2CORD+1
+0255 E516               SBC     Y1CORD+1
+0257 851E               STA     DELTAY+1
+0259 100F               BPL     DRAW3       ; SKIP AHEAD IF DIFFERENCE IS POSITIVE
+025B C622               DEC     YDIR        ; SET YDIR TO -1
+025D 38                 SEC                 ; NEGATE DELTAX
+025E A900               LDA     #0
+0260 E51D               SBC     DELTAY
+0262 851D               STA     DELTAY
+0264 A900               LDA     #0
+0266 E51E               SBC     DELTAY+1
+0268 851E               STA     DELTAY+1
+
+                ;       DETERMINE IF DELTAY IS LARGER-THAN DELTAX
+                ;       IF SO, EXCHANGE DELTAY AND DELTAX AND SET XCHFLG NONZERO
+                ;       ALSO INITIALIZE ACC TO DELTAX
+                ;       PUT A DOT AT THE INITIAL ENDPOINT
+
+026A A900       DRAW3:  LDA     #0          ; FIRST ZERO XCHFLG
+026C 8523               STA     XCHFLG
+026E A51D               LDA     DELTAY      ; COMPARE DELTAY WITH DELTAX
+0270 38                 SEC
+0271 E51B               SBC     DELTAX
+0273 A51E               LDA     DELTAY+1
+0275 E51C               SBC     DELTAX+1
+0277 9012               BCC     DRAW4       ; SKIP EXCHANGE IF DELTAX IS GREATER THAN
+                                            ; DELTAY
+0279 A61D               LDX     DELTAY      ; EXCHANGE DELTAX AND DELTAY
+027B A51B               LDA     DELTAX
+027D 851D               STA     DELTAY
+027F 861B               STX     DELTAX
+0281 A61E               LDX     DELTAY+1
+0283 A51C               LDA     DELTAX+1
+0285 851E               STA     DELTAY+1
+0287 861C               STX     DELTAX+1
+0289 C623               DEC     XCHFLG      ; SET XCHFLG TO -1
+028B A51B       DRAW4:  LDA     DELTAX      ; INITIALIZE ACC TO DELTAX
+028D 851F               STA     ACC
+028F A51C               LDA     DELTAX+1
+0291 8520               STA     ACC+1
+0293 20C801             JSR     STPIX       ; PUT A DOT AT THE INITIAL ENDPOINT;
+                                            ; X1CORD, Y1CORD
+
+                ;       HEAD OF MAIN DRAWING LOOP
+                ;       TEST IF DONE       
+
+0296 A523       DRAW45: LDA     XCHFLG      ; TEST IF X AND Y EXCHANGED
+0298 D00E               BNE     DRAW5       ; JUMP AHEAD IF SO
+029A A513               LDA     X1CORD      ; TEST FOR X1CORD=X2CORD
+029C C517               CMP     X2CORD
+029E D019               BNE     DRAW7       ; GO FOR ANOTHER ITERATION IF NOT
+02A0 A514               LDA     X1CORD+1
+02A2 C518               CMP     X2CORD+1
+02A4 D013               BNE     DRAW7       ; GO FOR ANOTHER ITERATION IF NOT
+02A6 F00C               BEQ     DRAW6       ; GO RETURN IF SO
+02A8 A515       DRAW5:  LDA     Y1CORD      ; TEST FOR Y1CORD=Y2CORD
+02AA C519               CMP     Y2CORD
+02AC D00B               BNE     DRAW7       ; GO FOR ANOTHER ITERATION IF NOT
+02AE A516               LDA     Y1CORD+1
+02B0 C51A               CMP     Y2CORD+1
+02B2 D005               BNE     DRAW7       ; GO FOR ANOTHER ITERATION IF NOT
+02B4 68         DRAW6:  PLA                 ; RESTORE INDEX REGISTERS
+02B5 A8                 TAY
+02B6 68                 PLA
+02B7 AA                 TAX
+02B8 60                 RTS                 ; AND RETURN
+
+                ;       DO A CLACULATION TO DETERMINE IF ONE OR BOTH AXES ARE TO BE
+                ;       BUMPED (INCREMENTED OR DECREMENTED ACCORDING TO XDIR AND YDIR)
+                ;       AND DO THE BUMPING
+
+02B9 A523       DRAW7:  LDA     XCHFLG      ; TEST IF X AND Y EXCHANGED
+02BB D006               BNE     DRAW8       ; JUMP IF SO
+02BD 200303             JSR     BMPX        ; BUMP X IF NOT
+02C0 4CC602             JMP     DRAW9
+02C3 201703     DRAW8:  JSR     BMPY        ; BUMP Y IF SO
+02C6 20E702     DRAW9:  JSR     SBDY        ; SUBSTRACT DY FROM ACC TWICE
+02C9 20E702             JSR     SBDY
+02CC 1013               BPL     DRAW12      ; SKIP AHEAD IF ACC IS NOT NEGATIVE
+02CE A523               LDA     XCHFLG      ; TEST IF X AND Y EXCHANGED
+02D0 D006               BNE     DRAW10      ; JUMP IF SO
+02D2 201703             JSR     BMPY        ; BUMP Y IF NOT
+02D5 4CDB02             JMP     DRAW11
+02D8 200303     DRAW10: JSR     BMPX        ; BUMP X IF SO
+02DB 20F502     DRAW11: JSR     ADDX        ; ADD DX TO ACC TWICE
+02DE 20F502             JSR     ADDX
+
+02E1 20C801     DRAW12: JSR     STPIX       ; OUTPUT THE NEW POINT
+02E4 4C9602             JMP     DRAW45      ; GO TEST IF DONE
+
+                ;       SUBROUTINES FOR DRAW
+
+02E7 A51F       SBDY:   LDA     ACC         ; SUBSTRACT DELTAY FROM ACC AND PUT RESULT
+02E9 38                 SEC                 ; IN ACC
+02EA E51D               SBC     DELTAY
+02EC 851F               STA     ACC
+02EE A520               LDA     ACC+1
+02F0 E51E               SBC     DELTAY+1
+02F2 8520               STA     ACC+1
+02F4 60                 RTS
+
+
+02F5 A51F       ADDX:   LDA     ACC         ; ADD DELTAX TO ACC AND PUT RESULT IN ACC
+02F7 18                 CLC
+02F8 651B               ADC     DELTAX
+02FA 851F               STA     ACC
+02FC A520               LDA     ACC+1
+02FE 651C               ADC     DELTAX+1
+0300 8520               STA     ACC+1
+0302 60                 RTS
+
+
+0303 A521       BMPX:   LDA     XDIR        ; BUMP X1CORD BY +1 OR -1 ACCORDING TO
+0305 D007               BNE     BMPX2       ; XDIR
+0307 E613               INC     X1CORD      ; DOUBLE INCREMENT X1CORD IF XDIR=0
+0309 D002               BNE     BMPX1
+030B E614               INC     X1CORD+1
+030D 60         BMPX1:  RTS
+030E A513       BMPX2:  LDA     X1CORD      ; DOUBLE DECREMENT X1CORD IF XDIR<>0
+0310 D002               BNE     BMPX3
+0312 C614               DEC     X1CORD+1
+0314 C613       BMPX3:  DEC     X1CORD
+0316 60                 RTS
+
+
+0317 A522       BMPY:   LDA     YDIR        ; BUMP Y1CORD BY +1 OR -1 ACCORDING TO
+0319 D007               BNE     BMPY2       ; YDIR
+031B E615               INC     Y1CORD      ; DOUBLE INCREMENT Y1CORD IF YDIR=0
+031D D002               BNE     BMPY1
+031F E616               INC     Y1CORD+1
+0321 60         BMPY1:  RTS
+0322 A515       BMPY2:  LDA     Y1CORD      ; DOUBLE DECREMENT Y1CORD IF YDIR<>0
+0324 D002               BNE     BMPY3
+0326 C616               DEC     Y1CORD+1
+0328 C615       BMPY3:  DEC     Y1CORD
+032A 60                 RTS
+
+                ;       SIGNED MULTIPLY SUBROUTINE
+                ;       ENTER WITH SIGNED MULTIPLIER IN PROD AND PROD+1
+                ;       ENTER WITH SIGNED MULTIPLICAND IN MPCD AND MPCD+1
+                ;       RETURN WITH 16 BIT SIGNED PRODUCT IN PROD (LOW) THROUGH
+                ;       PROD+3 (HIGH)
+                ;       A DESTROYED, X AND Y PRESERVED
+
+032B A527       SGNMPY: LDA     PROD        ; GET MULTIPLIER
+032D 852D               STA     MPSAVE      ; AND SAVE IT
+032F A528               LDA     PROD+1
+0331 852E               STA     MPSAVE+1
+0333 205903             JSR     UNSMPY      ; DO AN UNSIGNED MULTIPLY
+0336 A52C               LDA     MPCD+1      ; TEST SIGN OF MULTIPLICAND
+0338 100D               BPL     SGNMP1      ; JUMP IF POSITIVE
+033A A529               LDA     PROD+2      ; SUBTRACT MULTIPLIER FROM HIGH PRODUCT IF
+033C 38                 SEC                 ; NEGATIVE
+033D E52D               SBC     MPSAVE
+033F 8529               STA     PROD+2
+0341 A52A               LDA     PROD+3
+0343 E52E               SBC     MPSAVE+1
+0345 852A               STA     PROD+3
+0347 A52E       SGNMP1: LDA     MPSAVE+1    ; TEST SIGN OF MULTIPLIER
+0349 100D               BPL     SGNMP2      ; GO RETURN IF POSITIVE
+034B A529               LDA     PROD+2      ; SUBTRACT MULTIPLICAND FROM HIGH PRODUCT
+034D 38                 SEC                 ; IF NEGATIVE
+034E E52B               SBC     MPCD
+0350 8529               STA     PROD+2
+0352 A52A               LDA     PROD+3
+0354 E52C               SBC     MPCD+1
+0356 852A               STA     PROD+3
+0358 60         SGNMP2: RTS                 ; RETURN
+
+                ;       16 X 16 UNSIGNED MULTIPLY SUBROUTINE
+                ;       ENTER WITH UNSIGNED MULTIPLIER IN PROD AND PROD+1
+                ;       ENTER WITH UNSIGNED MULTIPLICAND IN MPCD AND MPCD+1
+                ;       RETURN WITH 16 BIT UNSIGNED PRODUCT IN PROD (LOW) THROUGH
+                ;       PROD+3 (HIGH)
+                ;       A DESTROYED, X AND Y PRESERVED
+
+0359 8A         UNSMPY: TXA                 ; SAVE X INDEX
+035A 48                 PHA
+035B A900               LDA     #0          ; CLEAR UPPER PRODUCT
+035D 852A               STA     PROD+3
+035F 8529               STA     PROD+2
+0361 A211               LDX     #17         ; SET 17 MULTIPLY CYCLE COUNT
+0363 18                 CLC                 ; INITIALLY CLEAR CARRY
+0364 208203     UNSM1:  JSR     SRQL        ; SHIFT MULTIPLIER AND PRODUCT RIGHT 1
+                                            ; PUTTING A MULTIPLIER BIT IN CARRY
+0367 CA                 DEX                 ; DECREMENT AND CHECK CYCLE COUNT
+0368 F012               BEQ     UNSM2       ; JUMP OUT IF DONE
+036A 90F8               BCC     UNSM1       ; SKIP MULTIPLICAND ADD IF MULTIPLIER BIT
+                                            ; IS ZERO
+036C A529               LDA     PROD+2      ; ADD MULTIPLICAND TO UPPER PRODUCT
+036E 18                 CLC
+036F 652B               ADC     MPCD
+0371 8529               STA     PROD+2
+0373 A52A               LDA     PROD+3
+0375 652C               ADC     MPCD+1
+0377 852A               STA     PROD+3
+0379 4C6403             JMP     UNSM1       ; GO FOR NEXT CYCLE
+037C 68         UNSM2:  PLA                 ; RESTORE X
+037D AA                 TAX
+037E 60                 RTS                 ; RETURN
+
+                ;       QUAD SHIFT RIGHT SUBROUTINE
+                ;       ENTER AT SRQA FOR ALGEBRAIC SHIFT RIGHT
+                ;       ENTER AT SRQL FOR LOGICAL SHIFT
+                ;       ENTER WITH QUAD PRECISION VALUE TO SHIFT IN PROD THROUGH PROD+3
+                ;       DESTROYS A, PRESERVES X AND Y, RETURNS BIT SHIFTED OUT IN CARRY
+
+037F A52A       SRQA:   LDA     PROD+3      ; GET SIGN BIT OF PROD IN CARRY
+0381 0A                 ASLA
+0382 662A       SRQL:   ROR     PROD+3      ; LOGICAL SHIFT RIGHT ENTRY
+0384 6629               ROR     PROD+2
+0386 6628               ROR     PROD+1
+0388 6627               ROR     PROD
+038A 60                 RTS                 ; RETURN
+
+
+                ;       QUAD SHIFT LEFT SUBROUTINE
+                ;       ENTER AT SLQL TO SHIFT IN A ZERO BIT
+                ;       ENTER AT RLQL TO SHIFT IN THE CARRY
+                ;       ENTER WITH QUAD PRECISION VALUE TO SHIFT IN PROD THROUGH PROD+3
+                ;       DESTROYS A, PRESERVES X AND Y, RETURNS BIT SHIFTED OUT IN CARRY
+
+038B 18         SLQL:   CLC                 ; SHIFT IN ZERO BIT ENTRY; CLEAR CARRY
+038C 2627       RLQL:   ROL     PROD        ; SHIFT IN CARRY ENTRY
+038E 2628               ROL     PROD+1
+0390 2629               ROL     PROD+2
+0392 262A               ROL     PROD+3
+0394 60                 RTS                 ; RETURN
+
+                ;       RANDOM NUMBER GENERATOR SUBROUTINE
+                ;       ENTER WITH SEED IN RANDNO
+                ;       EXIT WITH NEW RANDOM NUMBER IN RANDNO AND A
+                ;       USES 16 BIT FEEDBACK SHIFT REGISTER METHOD
+                ;       DESTROYS REGISTER A AND Y
+
+0395 A008       RAND:   LDY     #8          ; SET COUNTER FOR 8 RANDOM BITS
+0397 A50C       RAND1:  LDA     RANDNO      ; EXCLUSIVE-OR BITS 3, 12, 14, AND 15
+0399 4A                 LSRA                ; OF SEED
+039A 450C               EOR     RANDNO
+039C 4A                 LSRA
+039D 4A                 LSRA
+039E 450C               EOR     RANDNO
+03A0 4A                 LSRA
+03A1 450D               EOR     RANDNO+1    ; RESULT IS IN BIT 3 OF A
+03A3 4A                 LSRA                ; SHIFT INTO CARRY
+03A4 4A                 LSRA
+03A5 4A                 LSRA
+03A6 4A                 LSRA
+03A7 260D               ROL     RANDNO+1    ; SHIFT RANDNO LEFT ONE BRINGING IN CARRY
+03A9 260C               ROL     RANDNO
+03AB 88                 DEY                 ; TEST IF 8 NEW RANDOM BITS COMPUTED
+03AC D0E9               BNE     RAND1       ; LOOP FOR MORE IF NOT
+03AE A50C               LDA     RANDNO
+03B0 60                 RTS                 ; RETURN
+
+                ;       EXPONENTIALLY DISTRIBUTED RANDOM NUMBER SUBROUTINE
+                ;       RULES OF USE SAME AS RAND, 8 BIT RESULT RETURNED IN A
+                ;       AN EXPONENTIAL DISTRIBUTION MEANS THAT THE PROBABILITY OF A
+                ;       RESULT BETWEEN 10 AND 20 IS THE SAME AS THE PROBABILITY OF A
+                ;       RESULT BETWEEN 100 AND 200.
+                ;       NOTE THAT THE PROBABILITY OF A ZERO RESULT IS ZERO.
+
+03B1 209503     RNDEXP: JSR     RAND        ; GET TWO NEW RANDOM BYTES
+03B4 209503             JSR     RAND
+03B7 A50C               LDA     RANDNO      ; CONVERT ONE OF THE BYTES TO A RANDOM
+03B9 2907               AND     #7          ; VALUE BETWEEN 0 AND 7 AND PUT IN Y AS A
+03BB A8                 TAY                 ; SHIFT COUNT
+03BC C8                 INY
+03BD A50D               LDA     RANDNO+1    ; GET THE OTHER RANDOM NUMBER AND SHIFT IT
+03BF 88         RNDXP1: DEY                 ; RIGHT ACCORDING TO Y
+03C0 F004               BEQ     RNDXP2
+03C2 4A                 LSRA
+03C3 4CBF03             JMP     RNDXP1
+03C6 0900       RNDXP2: ORA     #0          ; TEST FOR A ZERO RESULT
+03C8 F0E7               BEQ     RNDEXP      ; PROHIBIT ZERO RESULTS
+03CA 60                 RTS                 ; RETURN
+
+                ;       RANGCK - CHECK FOR ACCEPTABLE RANGE OF FREQ AND DAMP PARAMETERS
+                ;       RETURN WITH CARRY OFF IF OK
+
+03CB A502       RANGCK: LDA     FREQ+1      ; MINIMUM ABSOLUTE VALUE FOR FREQ IS X'0100
+03CD F01C               BEQ     RANGNK      ; GO TO FAILURE RETURN IF HIGH BYTE IS 0
+03CF C9FF               CMP     #X'FF
+03D1 F018               BEQ     RANGNK      ; GO TO FAILURE RETURN IF HIGH BYTE IS FF
+03D3 A504       RANG2:  LDA     DAMP+1      ; CHECK THAT DAMP IS NOT GREATER THAN
+03D5 C97F               CMP     #X'7F       ; X'7EFF
+03D7 F012               BEQ     RANGNK      ; GO TO FAILURE RETURN IF SO
+03D9 A502       RANG3:  LDA     FREQ+1      ; IF FREQ AND DAMP ARE INDIVIDUALLY OK,
+03DB 1002               BPL     RANG4       ; VERIFY THAT DAMP IS ACCEPTABLY HIGH IF
+03DD 45FF               EOR     X'FF        ; ABSOLUTE VALUE OF FREQ IS SMALL
+03DF C908       RANG4:  CMP     #8
+03E1 1006               BPL     RANGOK      ; GO TO SUCCESS RETURN IF FREQ IS HIGH
+03E3 A504               LDA     DAMP+1      ; IF FREQ IS LOW, REQUIRE DAMP TO BE HIGH
+03E5 C97E               CMP     #X'7E
+03E7 3002               BMI     RANGNK      ; GO TO FAILURE RETURN IF DAMP NOT HIGH
+                                            ; ENOUGH WHEN FREQ IS LESS THAN X'10
+03E9 18         RANGOK: CLC                 ; CLEAR CARRY TO INDICATE SUCCESS
+03EA 60                 RTS                 ; RETURN
+03EB 38         RANGNK: SEC                 ; SET CARRY TO INDICATE FAILURE
+03EC 60                 RTS                 ; RETURN
+
+
+0000                    .END
