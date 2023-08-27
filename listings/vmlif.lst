@@ -1,655 +1,664 @@
 
-
-                ;       MTU VISIBLE MEMORY DEMONSTRATION PROGRAM
-                ;       JOSEPH CONWAY'S GAME OF LIFE ON A 320 BY 200 MATRIX
-                
-                ;       ENTRY POINT "DEMO" GENERATES AN INITIAL PATTERN OF CELLS AND
-                ;       THEN EXECUTES THE LIFE ALGORITHM ON IT.
-                
-                ;       FOR USER ENTERED PATTERNS, THE SCREEN SHOULD FIRST BE CLEARED
-                ;       BY EXECUTING "INIT". THE KIM KEYBOARD MONITOR OR "KYPT" MAY
-                ;       THEN BE USED TO ENTER THE INITIAL CELL PATTERN. AFTER PATTERN
-                ;       ENTRY, A JUMP TO "LIFE" WILL START COMPUTING THE SUCCEEDING
-                ;       GENERATIONS.
-                
-                ;       LIFE MAY BE INTERRUPTED AT THE END OF A GENERATION BY PRESSING
-                ;       ANY KEY (EXCEPT RESET OR ST) ON THE KIM KEYPAD AND HOLDING
-                ;       UNTIL THE END OF THE GENERATION. THIS WILL TRANSFER CONTROL
-                ;       TO "KYPT" FOR USER MODIFICATION OF THE DISPLAYED PATTERN.
-                
-                ;       KYPT IS USED FOR CONVENIENT ENTRY AND MODIFICATION OF CELL
-                ;       PATTERNS. WHEN ENTERED, A BLINKING GRAPHIC CURSOR IS
-                ;       DISPLAYED IN THE MIDDLE OF THE SCREEN. THE USER MAY MOVE THE
-                ;       CURSOR IN ANY DIRECTION AND EITHER SET OR CLEAR CELLS AT THE
-                ;       CURRENT CURSOR POSITION. THE CURSOR IS MOSTLY ON IF IT COVERS
-                ;       A LIVE CELL AND MOSTLY OFF OTHERWISE.
-                ;           THE KIM KEYBOARD IS USED FOR CONTROL OF THE PROGRAM. THE
-                ;       FOLLOWING KEYS ARE ACTIVE:
-                ;              1  CURSOR DOWN
-                ;              6  CURSOR RIGHT
-                ;              9  CURSOR UP
-                ;              4  CURSOR LEFT
-                ;              +  SET A CELL
-                ;              F  CLEAR A CELL
-                ;              GO GO TO LIFE ROUTINE USING THE CURRENT PATTERN
-                ;       PARTICULARLY INTERESTING INITIAL PATTERNS MAY BE SAVED ON KIM
-                ;       CASSETTE AND RELOADED LATER FOR DEMONSTRATIONS, ETC.
-                
-                ;       GENERAL EQUATES
-                
-1C22            KIMMON  =       X'1C22      ; ENTRY TO KIM MONITOR
-1F6A            GETKEY  =       X'1F6A      ; ADDRESS OF MONITOR KEYBOARD READ ROUTINE
-0140            NX      =       320         ; NUMBER OF BITS IN A ROW
-00C8            NY      =       200         ; NUMBER OF ROWS  (CHANGE FOR HALF SCREEN
-                                            ; OPERATION)
-FA00            NPIX    =       NX*NY       ; NUMBER OF PIXELS
-0032            DBCDLA  =       50          ; KIM KEYBOARD DEBOUNCE DELAY TIME
-                
-0000                    .=      0           ; START DEMO PROGRAM AT LOCATION ZERO
-                
-                ;       PARAMETER STORAGE
-                
-0000 20         VMORG:  .BYTE   X'20        ; FIRST PAGE IN DISPLAY MEMORY
-
-                ;       MISCELLANEOUS STORAGE
-
-0001            NCYSV:  .=.+    1           ; TEMPORARY STORAGE FOR NEIGHBOR COUNT
-                                            ; ROUTINE
-0002            NCNT:   .=.+    1           ; COUNT OF LIVE NEIGHBORS
-0003            LNCNT:  .=.+    1           ; CELL LINE COUNTER
-0004            NGEN:   .=.+    1           ; BYTE TO ACCUMULATE NEW CELLS
-0005            ADP1:   .=.+    2           ; ADDRESS POINTER 1
-0007            ADP2:   .=.+    2           ; ADDRESS POINTER 2
-0009            BTPT:   .=.+    1           ; BIT NUMBER
-000A            X1CORD: .=.+    2           ; COORDINATE PAIR 1
-000C            Y1CORD: .=.+    2
-000E            X2CORD: .=.+    2           ; COORDINATE PAIR 2
-0010            Y2CORD: .=.+    2
-0012            TEMP:   .=.+    2           ; TEMPORARY STORAGE
-0014            FLASHC: .=.+    2           ; TIME DELAY COUNTER FOR CURSOR FLASHING
-0016            LSTKEY  =       NCYSV       ; CODE OF LAST KEY PRESSED ON KIM KEYBOARD
-0016            DBCNT   =       NCNT        ; KIM KEYBOARD DEBOUNCE COUNTER
-0016            REALST  =       LNCNT       ; STATE OF CELL UNDER THE CURSOR
-
-                ;       TABLE OF MASKS FOR NEIGHBOR COUNTING
-
-0016 01                 .BYTE   X'01
-0017 80402010   MSK:    .BYTE   X'80,X'40,X'20,X'10
-001B 08040201           .BYTE   X'08,X'04,X'02,X'01
-001F 80                 .BYTE   X'80
-
-                ;       STORAGE TO BUFFER 3 FULL SCAN LINES OF CELLS
-
-0020 00                 .BYTE   0
-0021            TR:     .=.+    40          ; ROW ABOVE CENTRAL ROW
-0049            CR:     .=.+    40          ; CENTRAL ROW
-0071            BR:     .=.+    40          ; ROW BELOW CENTRAL ROW
-0099 00                 .BYTE   0
-
-                ;       CLEAR DISPLAY MEMORY AND INITIALIZE ROUTINE
-                ;       USED TO PREPARE SCREEN FOR USER ENTERED PATTERN
-
-009A D8         INIT:   CLD                 ; INITIALIZE MACHINE AND DISPLAY
-009B 202C02             JSR     CLEAR       ; CLEAR THE SCREEN
-009E 4C221C             JMP     KIMMON      ; RETURN TO THE MONITOR
-
-                ;       MAIN DEMO ROUTINE, DRAW INITIAL PATTERN
-                ;       DRAWS A FIGURE DEFINED BY "LIST" AND THEN JUMPS TO LIFE
-
-00A1 D8         DEMO:   CLD                 ; CLEAR DECIMAL MODE
-00A2 202C02             JSR     CLEAR       ; CLEAR THE SCREEN
-00A5 A200               LDX     #0          ; INITIALIZE INDEX FOR COORDINATE LIST
-00A7 BD3603     DEMO1:  LDA     LIST+1,X    ; GET HIGH BYTE OF X COORDINATE
-00AA 101A               BPL     DEMO2       ; JUMP IF A DRAW COMMAND
-00AC C9FF               CMP     #X'FF       ; IF MOVE, TEST FOR END OF LIST FLAG
-00AE F050               BEQ     LIFE        ; GO TO LIFE IF SO
-00B0 297F               AND     #X'7F       ; DELETE SIGN BIT
-00B2 850B               STA     X1CORD+1    ; FOR MOVE JUST COPY COORDINATES FROM LIST
-00B4 BD3503             LDA     LIST,X      ; INTO X1CORD,Y1CORD
-00B7 850A               STA     X1CORD
-00B9 BD3703             LDA     LIST+2,X
-00BC 850C               STA     Y1CORD
-00BE BD3803             LDA     LIST+3,X
-00C1 850D               STA     Y1CORD+1
-00C3 4CDA00             JMP     DEMO3
-00C6 850F       DEMO2:  STA     X2CORD+1    ; FOR DRAW, COPY COORDINATES FROM LIST
-00C8 BD3503             LDA     LIST,X      ; INTO X2CORD,Y2CORD
-00CB 850E               STA     X2CORD
-00CD BD3703             LDA     LIST+2,X
-00D0 8510               STA     Y2CORD
-00D2 BD3803             LDA     LIST+3,X
-00D5 8511               STA     Y2CORD+1
-00D7 20F502             JSR     SDRAW       ; DRAW LINE FROM X1CORD,Y1CORD TO X2CORD,
-00DA E8         DEMO3:  INX                 ; Y2CORD
-00DB E8                 INX                 ; BUMP INDEX TO NEXT SET OF COORDINATES
-00DC E8                 INX
-00DD E8                 INX
-00DE D0C7               BNE     DEMO1       ; LOOP UNTIL END OF LIST REACHED
-00E0 F01E               BEQ     LIFE        ; GO TO LIFE ROUTINE WHEN DONE
-
-                ;       CSRINS - INSERT GRAPHIC CURSOR AT X1CORD,Y1CORD
-                ;       SAVES STATE OF THE CELL ALREADY THERE IN REALST
-
-00E2 20CC02     CSRINS: JSR     RDPIX       ; READ CURRENT STATE OF CELL UNDER CURSOR
-00E5 8503               STA     REALST      ; SAVE THE STATE
-00E7 60                 RTS                 ; RETURN
-
-                ;       CSRDEL - DELETE THE GRAPHIC CURSOR AT X1CORD,Y1CORD
-                ;       AND RESTORE THE CELL THAT WAS ORIGINALLY THERE
-
-00E8 A503       CSRDEL: LDA     REALST      ; GET SAVED CELL STATE
-00EA 20C402             JSR     WRPIX       ; PUT IT BACK INTO DISPLAY MEMORY
-00ED 60                 RTS                 ; RETURN
-
-00EE                    .=      X'100
-
-0100 A900       LIFE:   LDA     #0          ; PRIME THE THREE LINE BUFFERS
-0102 8505               STA     ADP1        ; INITIALIZE VM POINTER TO TOP OF SCREEN
-0104 A500               LDA     VMORG
-0106 8506               STA     ADP1+1
-0108 201D02             JSR     PRIME       ; DO THE PRIMING
-
-                ;       MAIN LIFE LOOP
-
-010B A9C6               LDA     #198        ; SET THE COUNT OF ROWS TO PROCESS
-010D 8503               STA     LNCNT
-010F A505       LIFE1:  LDA     ADP1        ; INCREMENT THE ADDRESS POINTER TO THE
-0111 18                 CLC                 ; NEXT LINE
-0112 6928               ADC     #40
-0114 8505               STA     ADP1
-0116 9002               BCC     LIFE2
-0118 E606               INC     ADP1+1
-011A 203101     LIFE2:  JSR     LFBUF       ; EXECUTE LIFE ALGORITHM ON CENTRAL ROW
-                                            ; IN BUFFER AND UPDATE THE CURRENT ROW IN
-                                            ; DISPLAY MEMORY
-011D C603               DEC     LNCNT       ; DECREMENT THE LINE COUNT
-011F F006               BEQ     LIFE3       ; JUMP OUT IF 198 LINES BEEN PROCESSED
-0121 200002             JSR     ROLL        ; ROLL THE BUFFERS UP ONE POSITION
-0124 4C0F01             JMP     LIFE1       ; GO PROCESS THE NEXT LINE
-
-                ;       END OF GENERATION, TEST KIM KEYBOARD
-
-0127 206A1F     LIFE3:  JSR     GETKEY
-012A C915               CMP     #21
-012C B0D2               BCS     LIFE        ; GO FOR NEXT GENERATION IF NO KET PRESSED
-012E 4CC703             JMP     KYPT        ; GO TO KEYBOARD PATTERN ENTRY IF A
-                                            ; KEY WAS PRESSED
-
-                ;       LIFE NEXT GENERATION ROUTINE
-                ;       THE CELLS IN THE MIDDLE LINE BUFFER ARE SCANNED AND THEIR
-                ;       NEIGHBORS COUNTED TO DETERMINE IF THEY LIVE, DIE, OR GIVE
-                ;       BIRTH. THE UPDATED CENTRAL LINE IS STORED BACK INTO DISPLAY
-                ;       MEMORY STARTING AT (ADP1).
-                ;       TO IMPROVE SPEED, WHEN PROCESSING THE CENTRAL 6 BITS IN A BYTE
-                ;       THE ENTIRE BYTE AND ITS NEIGHBORS ARE CHECKED FOR ZERO.
-                ;       IF ALL ARE ZERO, THE 6 BITS ARE SKIPPED.
-
-0131 A000       LFBUF:  LDY     #0          ; INITIALIZE BYTE ADDRESS
-0133 A207       LFBUF1: LDX     #7          ; PREPARE FOR THE NEXT BYTE
-0135 A900               LDA     #0          ; ZERO NEXT GEN BYTE
-0137 8504               STA     NGEN
-0139 E006       LFBUF2: CPX     #6          ; TEST IF TO PROCESS BIT 6
-013B D00D               BNE     LFBUF3      ; JUMP IF NOT
-013D B92100             LDA     TR,Y        ; TEST IF CENTRAL BYTE AND ITS NEIGHBORS
-0140 194900             ORA     CR,Y        ; ARE ALL ZEROES MEANING THAT NO CHANGE IS
-0143 197100             ORA     BR,Y        ; POSSIBLE IN THE CENTRAL 6 BITS OF THE
-0146 D002               BNE     LFBUF3      ; CURRENT BYTE
-0148 A200               LDX     #0          ; IF ZEROES, SKIP 6 CENTRAL BITS
-014A 207501     LFBUF3: JSR     NCNTC       ; COUNT NEIGHBORS
-014D A502               LDA     NCNT
-014F F01B               BEQ     LFBUF6      ; JUMP IF EXACTLY 3 LIVE NEIGHBORS
-0151 3004               BMI     LFBUF4      ; JUMP IF MORE THAN 3 LIVE NEIGHBORS
-0153 C901               CMP     #1
-0155 F00D               BEQ     LFBUF5      ; JUMP IF EXACTLY 2 LIVE NEIGHBORS
-0157 CA         LFBUF4: DEX                 ; DECREMENT BIT NUMBER
-0158 10DF               BPL     LFBUF2      ; GO PROCESS NEXT BIT IF NOT DONE WITH BYTE
-015A A504               LDA     NGEN        ; STORE NEXT GENERATION BYTE INTO DISPLAY
-015C 9105               STA     (ADP1),Y    ; MEMORY
-015E C8                 INY                 ; GO TO NEXT BYTE
-015F C028               CPY     #40         ; TEST IF DONE
-0161 D0D0               BNE     LFBUF1      ; LOOP IF NOT
-0163 60                 RTS                 ; OTHERWISE RETURN
-
-0164 B94900     LFBUF5: LDA     CR,Y        ; WHEN EXACTLY 2 NEIGHBORS, TEST CURRENT
-0167 3517               AND     MSK,X       ; CELL
-0169 4C6E01             JMP     LFBUF7      ; NEW CELL IF CURRENT CELL IS ALIVE
-
-016C B517       LFBUF6: LDA     MSK,X       ; CREATE A CELL IN THE NEXT GENERATION
-016E 0504       LFBUF7: ORA     NGEN
-0170 8504               STA     NGEN
-0172 4C5701             JMP     LFBUF4
-
-                ;       NEIGHBOR COUNT ROUTINE FOR ALL EIGHT NEIGHBORS OF A CENTRAL
-                ;       CELL. USES THREE SCAN LINE BUFFER IN BASE PAGE FOR MAXIMUM
-                ;       SPEED. INDEX Y POINTS TO BYTE CONTAINING CENTRAL CELL
-                ;       RELATIVE TO BEGINNING OF CENTRAL SCAN LINE. INDEX X HAS BIT
-                ;       NUMBER OF CENTRAL CELL, O=LEFTMOST IN BYTE. EXITS WITH 3-N IN
-                ;       NCNT WHERE N IS NUMBER OF LIVE NEIGHBORS. PRESERVES X AND Y.
-
-0175 8401       NCNTC:  STY     NCYSV       ; SAVE Y
-0177 A903               LDA     #3          ; INITIALIZE THE NEIGHBOR COUNT
-0179 8502               STA     NCNT
-017B B92100     N1:     LDA     TR,Y        ; CHECK CELLS DIRECTLY ABOVE AND BELOW
-017E 3517               AND     MSK,X       ; CENTRAL CELL FIRST
-0180 F002               BEQ     N2
-0182 C602               DEC     NCNT
-0184 B97100     N2:     LDA     BR,Y
-0187 3517               AND     MSK,X
-0189 F002               BEQ     N3
-018B C602               DEC     NCNT
-018D E000       N3:     CPX     #0          ; TEST COLUMN OF 3 LEFT CELLS NEXT
-018F D001               BNE     N3A         ; SKIP AHEAD IF IN THE SAME BYTE
-0191 88                 DEY                 ; OTHERWISE MOVE 1 BYTE LEFT
-0192 B92100     N3A:    LDA     TR,Y
-0195 3516               AND     MSK-1,X
-0197 F002               BEQ     N4
-0199 C602               DEC     NCNT
-019B B94900     N4:     LDA     CR,Y
-019E 3516               AND     MSK-1,X
-01A0 F004               BEQ     N5
-01A2 C602               DEC     NCNT
-01A4 302F               BMI     NCXIT       ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
-01A6 B97100     N5:     LDA     BR,Y
-01A9 3516               AND     MSK-1,X
-01AB F004               BEQ     N6
-01AD C602               DEC     NCNT
-01AF 3024               BMI     NCXIT       ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
-01B1 A401       N6:     LDY     NCYSV       ; RESTORE Y
-01B3 E007               CPX     #7          ; TEST COLUMN OF 3 RIGHT CELLS LAST
-01B5 D001               BNE     N6A         ; SKIP AHEAD IF IN THE SAME BYTE
-01B7 C8                 INY                 ; OTHERWISE MOVE 1 BYTE RIGHT
-01B8 B92100     N6A:    LDA     TR,Y
-01BB 3518               AND     MSK+1,X
-01BD F004               BEQ     N7
-01BF C602               DEC     NCNT
-01C1 3012               BMI     NCXIT       ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
-01C3 B94900     N7:     LDA     CR,Y
-01C6 3518               AND     MSK+1,X
-01C8 F002               BEQ     N8
-01CA C602               DEC     NCNT
-01CC B97100     N8:     LDA     BR,Y
-01CF 3518               AND     MSK+1,X
-01D1 F002               BEQ     NCXIT
-01D3 C602               DEC     NCNT
-01D5 A401       NCXIT:  LDY     NCYSV       ; RESTORE Y
-01D7 60                 RTS                 ; AND RETURN
-
-                ;       ROLL THE THREE LINE BUFFERS UP ONE POSITION
-                ;       AND BRING IN A NEW LINE FROM DISPLAY MEMORY STARTING AT
-                ;       (ADP1) +80 PRESERVES INDEX REGISTERS
-
-01D8                    .=      X'200
-0200 98         ROLL:   TYA                 ; SAVE INDEX Y
-0201 48                 PHA
-0202 A050               LDY     #80         ; INITIALIZE INDEX
-0204 B9F9FF     ROLL1:  LDA     CR-80,Y     ; ROLL A BYTE
-0207 99D1FF             STA     TR-80,Y
-020A B92100             LDA     BR-80,Y
-020D 99F9FF             STA     CR-80,Y
-0210 B105               LDA     (ADP1),Y
-0212 992100             STA     BR-80,Y
-0215 C8                 INY                 ; INCREMENT INDEX
-0216 C078               CPY     #120        ; TEST IF 40 BYTES ROLLED
-0218 D0EA               BNE     ROLL1       ; LOOP IF NOT
-021A 68                 PLA                 ; RESTORE Y
-021B A8                 TAY
-021C 60                 RTS                 ; RESTURN
-
-                ;       PRIME THE LINE BUFFERS WITH THE FIRST THREE LINES OF DISPLAY
-                ;       MEMORY
-                ;       MOVES 120 BYTES STARTING AT (ADP1) INTO LINE BUFFERS STARTING
-                ;       AT TR
-
-021D 98         PRIME:  TYA                 ; SAVE INDEX Y
-021E 48                 PHA
-021F A077               LDY     #119        ; INITIALIZE INDEX
-0221 B105       PRIME1: LDA     (ADP1),Y    ; MOVE A BYTE
-0223 992100             STA     TR,Y
-0226 88                 DEY                 ; DECREMENT INDEX
-0227 10F8               BPL     PRIME1      ; LOOP IF NOT DONE
-0229 68                 PLA                 ; RESTORE Y
-022A A8                 TAY
-022B 60                 RTS                 ; RETURN
-
-                ;       CLEAR DISPLAY MEMORY ROUTINE
-
-022C A000       CLEAR:  LDY     #0          ; INITIALIZE ADDRESS POINTER
-022E 8405               STY     ADP1        ; AND ZERO INDEX Y
-0230 A500               LDA     VMORG
-0232 8506               STA     ADP1+1
-0234 18                 CLC
-0235 6920               ADC     #X'20
-0237 AA                 TAX
-0238 98         CLEAR1: TYA                 ; CLEAR A BYTE
-0239 9105               STA     (ADP1),Y
-023B E605               INC     ADP1        ; INCREMENT ADDRESS POINTER
-023D D0F9               BNE     CLEAR1
-023F E606               INC     ADP1+1
-0241 E406               CPX     ADP1+1      ; TEST IF DONE
-0243 D0F3               BNE     CLEAR1
-0245 60                 RTS                 ; RETURN
-
-                ;       PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
-                ;                X1CORD, Y1CORD
-                ;       PUTS BYTE ADDRESS IN ADP1 AND BIT NUMBER (BIT 0 IS LEFTMOST)
-                ;       IN BTPT.
-                ;       DOES NOT CHECK MAGNITUDE OF COORDINATES FOR MAXIMUM SPEED
-                ;       PRESERVES X AND Y REGISTERS, DESTROYS A
-                ;       BYTE ADDRESS = VMORG*256+(199-Y1CORD)*40+INT(XCORD/8)
-                ;       BIT ADDRESS = REM(XCORD/8)
-                ;       OPTIMIZED FOR SPEED THEREFORE CALLS TO A DOUBLE SHIFT ROUTINE
-                ;       ARE NOT DONE
-
-0246 A50A       PIXADR: LDA     X1CORD      ; COMPUTE BIT ADDRESS FIRST
-0248 8505               STA     ADP1        ; ALSO TRANSFER X1CORD TO ADP1
-024A 2907               AND     #X'07       ; WHICH IS SIMPLY THE LOW 3 BITS OF X
-024C 8509               STA     BTPT
-024E A50B               LDA     X1CORD+1    ; FINISH TRANSFERRING X1CORD TO ADP1
-0250 8506               STA     ADP1+1
-0252 4606               LSR     ADP1+1      ; DOUBLE SHIFT ADP1 RIGHT 3 TO GET
-0254 6605               ROR     ADP1        ; INT(XCORD/8)
-0256 4606               LSR     ADP1+1
-0258 6605               ROR     ADP1
-025A 4606               LSR     ADP1+1
-025C 6605               ROR     ADP1
-025E A9C7               LDA     #199        ; TRANSFER (199-Y1CORD) TO ADP2
-0260 38                 SEC                 ; AND TEMPORARY STORAGE
-0261 E50C               SBC     Y1CORD
-0263 8507               STA     ADP2
-0265 8512               STA     TEMP
-0267 A900               LDA     #0
-0269 E50D               SBC     Y1CORD+1
-026B 8508               STA     ADP2+1
-026D 8513               STA     TEMP+1
-026F 0607               ASL     ADP2        ; COMPUTE 40*(199-Y1CORD)
-0271 2608               ROL     ADP2+1      ;  2*(199-Y1CORD)
-0273 0607               ASL     ADP2
-0275 2608               ROL     ADP2+1      ;  4*(199+Y1CORD)
-0277 A507               LDA     ADP2        ;  ADD IN TEMPORARY SAVE OF (199-Y1CORD)
-0279 18                 CLC                 ;  TO MAKE 5*(199-Y1CORD)
-027A 6512               ADC     TEMP
-027C 8507               STA     ADP2
-027E A508               LDA     ADP2+1
-0280 6513               ADC     TEMP+1
-0282 8508               STA     ADP2+1      ;  5*(199-Y1CORD)
-0284 0607               ASL     ADP2        ;  10*(199-Y1CORD)
-0286 2608               ROL     ADP2+1
-0288 0607               ASL     ADP2        ;  20*(199-Y1CORD)
-028A 2608               ROL     ADP2+1
-028C 0607               ASL     ADP2        ;  40*(199-Y1CORD)
-028E 2608               ROL     ADP2+1
-0290 A507               LDA     ADP2        ; ADD IN INT(X1CORD/8) COMPUTED EARLIER
-0292 18                 CLC
-0293 6505               ADC     ADP1
-0295 8505               STA     ADP1
-0297 A508               LDA     ADP2+1
-0299 6506               ADC     ADP1+1
-029B 6500               ADC     VMORG       ; ADD IN VMORG*256
-029D 8506               STA     ADP1+1      ; FINAL RESULT
-029F 60                 RTS                 ; RETURN
-
-                ;       STPIX - SETS THE PIXEL AT X1CORD,Y1CORD TO A ONE (WHITE DOT)
-                ;       DOES NOT ALTER X1CORD OR Y1CORD
-                ;       PRESERVES X AND Y
-                ;       ASSUMES IN RANGE CORRDINATES
-
-02A0 204602     STPIX:  JSR     PIXADR      ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
-                                            ; INTO ADP1
-02A3 98                 TYA                 ; SAVE Y
-02A4 48                 PHA
-02A5 A409               LDY     BTPT        ; GET BIT NUMBER IN Y
-02A7 B9E502             LDA     MSKTB1,Y    ; GET A BYTE WITH THAT BIT =1, OTHERS =0
-02AA A000               LDY     #0          ; ZERO Y
-02AC 1105               ORA     (ADP1),Y    ; COMBINE THE BIT WITH THE ADDRESSED VM
-                                            ; BYTE
-02AE 4CBF02             JMP     CLPIX1      ; GO STORE RESULT, RESTORE Y, AND RETURN
-
-                ;       CLPIX - CLEARS THE PIXEL AT X1CORD,Y1CORD TO A ZERO (BLACK DOT
-                ;       DOES NOT ALTER X1CORD OR Y1CORD
-                ;       PRESERVES X AND Y
-                ;       ASSUMES IN RANGE COORDINATES
-
-02B1 204602     CLPIX:  JSR     PIXADR      ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
-                                            ; INTO ADP1
-02B4 98                 TYA                 ; SAVE Y
-02B5 48                 PHA
-02B6 A409               LDY     BTPT        ; GET BIT NUMBER IN Y
-02B8 B9ED02             LDA     MSKTB2,Y    ; GET A BYTE WITH THAT BIT =0, OTHERS =1
-02BB A000               LDY     #0          ; ZERO Y
-02BD 3105               AND     (ADP1),Y    ; REMOVE THE BIT FROM THE ADDRESSED VM
-02BF 9105       CLPIX1: STA     (ADP1),Y    ; BYTE
-02C1 68                 PLA                 ; RESTORE Y
-02C2 A8                 TAY
-02C3 60                 RTS                 ; AND RETURN
-
-                ;       WRPIX - SETS THE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE STATE
-                ;       OF BIT O (RIGHTMOST) OF A
-                ;       DOES NOT ALTER X1CORD OR Y1CORD
-                ;       PRESERVES X AND Y
-                ;       ASSUMES IN RANGE CORRDINATES
-
-02C4 2CCB02     WRPIX:  BIT     WRPIXM      ; TEST LOW BIT OF A
-02C7 F0E8               BEQ     CLPIX       ; JUMP IF A ZERO TO BE WRITTEN
-02C9 D0D5               BNE     STPIX       ; OTHERWISE WRITE A ONE
-
-02CB 01         WRPIXM: .BYTE   1           ; BIT TEST MASK FOR BIT 0
-
-                ;       RDPIX - READS THE PIXEL AT X1CORD,Y1CORD AND SETS A TO ALL
-                ;       ZEROES IF IT IS A ZERO OR TO ALL ONES IF IT IS A ONE
-                ;       LOW BYTE OF ADP1 IS EQUAL TO A ON RETURN
-                ;       DOES NOT ALTER X1CORD OR Y1CORD
-                ;       PRESERVES X AND Y
-                ;       ASSUMES IN RANGE CORRDINATES
-
-02CC 204602     RDPIX:  JSR     PIXADR      ; GET BYTE AND BIT ADDRESS OF PIXEL
-02CF 98                 TYA                 ; SAVE Y
-02D0 48                 PHA
-02D1 A000               LDY     #0          ; GET ADDRESSED BYTE FROM VM
-02D3 B105               LDA     (ADP1),Y
-02D5 A409               LDY     BTPT        ; GET BIT NUMBER IN Y
-02D7 39E502             AND     MSKTB1,Y    ; CLEAR ALL BUT ADDRESSED BIT
-02DA F002               BEQ     RDPIX1      ; SKIP AHEAD IF IT WAS A ZERO
-02DC A9FF               LDA     #X'FF       ; SET TO ALL ONES IF IT WAS A ONE
-02DE 8505       RDPIX1: STA     ADP1        ; SAVE A TEMPORARILY IN ADP1 WHILE
-02E0 68                 PLA                 ; RESTORING Y
-02E1 A8                 TAY
-02E2 A505               LDA     ADP1
-02E4 60                 RTS                 ; RETURN
-
-                ;       MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
-                ;       MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
-                ;       MSKTB2 IS A TABLE OF O BITS CORRESPONDING TO BIT NUMBERS
-
-02E5 80402010   MSKTB1: .BYTE   X'80,X'40,X'20,X'10
-02E9 08040201           .BYTE   X'08,X'04,X'02,X'01
-02ED 7FBFDFEF   MSKTB2: .BYTE   X'7F,X'BF,X'DF,X'EF
-02F1 F7FBFDFE           .BYTE   X'F7,X'FB,X'FD,X'FE
-
-                ;       SDRAW - SIMPLIFIED DRAW ROUTINE
-                ;       DRAWS A LINE FROM X1CORD,Y1CORD TO X2CORD,Y2CORD
-                ;       WHEN DONE COPIES X2CORD AND Y2CORD INTO X1CORD AND Y1CORD
-                ;       RESTRICTED TO HORIZONTAL, VERTICAL, AND 45 DEGREE DIAGONAL
-                ;       LINES (SLOPE=1)
-                ;       PRESERVES BOTH INDEX REGISTERS
-
-02F5 8A         SDRAW:  TXA                 ; SAVE INDEX REGS
-02F6 48                 PHA
-02F7 98                 TYA
-02F8 48                 PHA
-02F9 20A002             JSR     STPIX       ; PUT A DOT AT INITIAL ENDPOINT
-02FC A000       SDRAW1: LDY     #0          ; CLEAR "SOMETHING DONE" FLAG
-02FE A200               LDX     #0          ; UPDATE X COORDINATE
-0300 201303             JSR     UPDC
-0303 A202               LDX     #Y1CORD-X1CORD;UPDATE Y COORDINATE
-0305 201303             JSR     UPDC
-0308 20A002             JSR     STPIX       ; PUT A DOT AT INTERMEDIATE POINT
-030B 88                 DEY                 ; TEST IF EITHER COORDINATE CHANGED
-030C 10EE               BPL     SDRAW1      ; ITERATE AGAIN IF SO
-030E 68                 PLA                 ; RESTORE INDEX REGISTERS
-030F A8                 TAY
-0310 68                 PLA
-0311 AA                 TAX
-0312 60                 RTS                 ; RETURN
-
-                ;       INTERNAL SUBROUTINE FOR UPDATING COORDINATES
-
-0313 B50F       UPDC:   LDA     X2CORD+1,X  ; COMPARE ENDPOINT WITH CURRENT POSITION
-0315 D50B               CMP     X1CORD+1,X
-0317 9012               BCC     UPDC3       ; JUMP IF CURRENT POSITION IS LARGER
-0319 D008               BNE     UPDC1       ; JUMP IF ENDPOINT IS LARGER
-031B B50E               LDA     X2CORD,X
-031D D50A               CMP     X1CORD,X
-031F 900A               BCC     UPDC3       ; JUMP IF CURRENT POSITION IS LARGER
-0321 F011               BEQ     UPDC5       ; GO RETURN IF EQUAL
-0323 F60A       UPDC1:  INC     X1CORD,X    ; ENDPOINT IS LARGER, INCREMENT CURRENT
-0325 D002               BNE     UPDC2       ; POSITION
-0327 F60B               INC     X1CORD+1,X
-0329 C8         UPDC2:  INY                 ; SET "DONE SOMETHING" FLAG
-032A 60                 RTS                 ; RETURN
-032B B50A       UPDC3:  LDA     X1CORD,X    ; CURRENT POSITION IS LARGER, DECREMENT
-032D D002               BNE     UPDC4       ; CURRENT POSITION
-032F D60B               DEC     X1CORD+1,X
-0331 D60A       UPDC4:  DEC     X1CORD,X
-0333 C8                 INY                 ; SET "DONE SOMETHING" FLAG
-0334 60         UPDC5:  RTS                 ; RETURN
-
-                ;       COORDINATE LIST DEFINING THE INITIAL PATTERN FOR LIFE
-                ;       EACH VERTEX IN THE FIGURE IS REPRESENTED BY 4 BYTES
-                ;       THE FIRST TWO BYTES ARE THE X COORDINATE OF THE NEXT ENDPOINT
-                ;       AND THE NEXT TWO BYTES ARE THE Y COORDINATE.
-                ;       IF THE HIGH BYTE OF X HAS THE SIGN BIT ON, A MOVE FROM THE
-                ;       CURRENT POSITION TO THE NEW POSITION IS DONE (THE SIGN BIT IS
-                ;       IS DELETED BEFORE MOVING)
-                ;       IF THE HIGH BYTE OF X HAS THE SIGN BIT OFF, A DRAW FROM THE
-                ;       CURRENT POSITION TO THE NEW POSITION IS DONE.
-                ;       IF THE HIGH BYTE OF X = X'FF, IT IS THE END OF THE LIST.
-
-0335 38803C 00  LIST:   .WORD   56+X'8000,60    ; 1     MOVE
-0339 38008C 00          .WORD   56,140          ; 2     DRAW
-033D 48008C 00          .WORD   72,140          ; 3     DRAW
-0341 48004C 00          .WORD   72,76           ; 4
-0345 68004C 00          .WORD   104,76          ; 5
-0349 68003C 00          .WORD   104,60          ; 6
-034D 38003C 00          .WORD   56,60           ; 7
-0351 78803C 00          .WORD   120+X'8000,60   ; 8     MOVE
-0355 78008C 00          .WORD   120,140         ; 9
-0359 88008C 00          .WORD   136,140         ; 10
-035D 88003C 00          .WORD   136,60          ; 11
-0361 78003C 00          .WORD   120,60          ; 12
-0365 98803C 00          .WORD   152+X'8000,60   ; 13    MOVE
-0369 98008C 00          .WORD   152,140         ; 14
-036D C8008C 00          .WORD   200,140         ; 15
-0371 C8007C 00          .WORD   200,124         ; 16
-0375 A8007C 00          .WORD   168,124         ; 17
-0379 A8006C 00          .WORD   168,108         ; 18
-037D C0006C 00          .WORD   192,108         ; 19
-0381 C0005C 00          .WORD   192,92          ; 20
-0385 A8005C 00          .WORD   168,92          ; 21
-0389 A8003C 00          .WORD   168,60          ; 22
-038D 98003C 00          .WORD   152,60          ; 23
-0391 D8803C 00          .WORD   216+X'8000,60   ; 24    MOVE
-0395 D8008C 00          .WORD   216,140         ; 25
-0399 08018C 00          .WORD   264,140         ; 26
-039D 08017C 00          .WORD   264,124         ; 27
-03A1 E8007C 00          .WORD   232,124         ; 28
-03A5 E8006C 00          .WORD   232,108         ; 29
-03A9 00016C 00          .WORD   256,108         ; 30
-03AD 00015C 00          .WORD   256,92          ; 31
-03B1 E8005C 00          .WORD   232,92          ; 32
-03B5 E8004C 00          .WORD   232,76          ; 33
-03B9 08014C 00          .WORD   264,76          ; 34
-03BD 08013C 00          .WORD   264,60          ; 35
-03C1 D8003C 00          .WORD   216,60          ; 36
-03C5 FFFF               .WORD   X'FFFF          ; END OF LIST
-
-                ;       KEYBOARD PATTERN ENTRY ROUTINES
-                ;       USES THE KIM KEYBOARD AND A CURSOR TO SIMPLIFY THE ENTRY
-                ;       OF INITIAL LIFE PATTERNS
-
-03C7 A900       KYPT:   LDA     #0              ; SET INITIAL CURSOR POSITION IN CENTER
-03C9 850B               STA     X1CORD+1        ; OF SCREEN
-03CB 850D               STA     Y1CORD+1
-03CD A9A0               LDA     #160
-03CF 850A               STA     X1CORD
-03D1 A964               LDA     #100
-03D3 850C               STA     Y1CORD
-03D5 20E200             JSR     CSRINS          ; INSERT A CURSOR ON THE SCREEN
-03D8 A932       KYPT0:  LDA     #DBCDLA         ; RESET THE DEBOUNCE COUNT
-03DA 8502               STA     DBCNT
-03DC E614       KYPT1:  INC     FLASHC          ; DOUBLE INCREMENT CURSOR FLASH COUNT
-03DE D002               BNE     KYPT2
-03E0 E615               INC     FLASHC+1
-
-                ;       GENERATE A 25% DUTY CURSOR IF CELL IS DEAD AND 75% IF ALIVE
-
-03E2 A515       KYPT2:  LDA     FLASHC+1        ; GET HIGH BYTE OF FLASH COUNTER
-03E4 4A                 LSRA                    ; COMPUTE LOGICAL "AND" OF BITS O AND 1
-03E5 2515               AND     FLASHC+1        ; IN ACC BIT 0
-03E7 4503               EOR     REALST          ; EXCLUSIVE-OR WITH REAL STATE OF CELL
-03E9 20C402             JSR     WRPIX           ; DISPLAY THE CURSOR
-
-                ;       READ KIM KEYBOARD AND DETECT ANY CHANGE IN KEYS PRESSED
-
-03EC 206A1F             JSR     GETKEY          ; GET CURRENT PRESSED KEY
-03EF C501               CMP     LSTKEY          ; TEST IF SAME AS BEFORE
-03F1 F0E5               BEQ     KYPT0           ; IGNORE IF SO
-03F3 C602               DEC     DBCNT           ; IF DIFFERENT, DECREMENT AND TEST
-03F5 10E5               BPL     KYPT1           ; DEBOUNCE COUNT AND IGNORE KEY IF NOT RUN
-                                                ; OUT
-03F7 8501               STA     LSTKEY          ; AFTER DEBOUNCE, UPDATE KEY LAST PRESSED
-03F9 4C8017             JMP     KYPT6           ; AND GO PROCESS THE KEYSTROKE
-
-03FC                    .=      X'1780          ; CONTINUE PROGRAM IN 6530 RAM
-
-1780 C901       KYPT6:  CMP     #1              ; TEST "1" KEY
-1782 F01B               BEQ     CSRD            ; JUMP IF CURSOR DOWN
-1784 C909               CMP     #9              ; TEST "9" KEY
-1786 F01F               BEQ     CSRU            ; JUMP IF CURSOR UP
-1788 C904               CMP     #4              ; TEST "4" KEY
-178A F023               BEQ     CSRL            ; JUMP IF CURSOR LEFT
-178C C906               CMP     #6              ; TEST "6" KEY
-178E F02D               BEQ     CSRR            ; JUMP IF CURSOR RIGHT
-1790 C913               CMP     #19             ; TEST "GO" KEY
-1792 F043               BEQ     GO              ; JUMP IF GO KEY
-1794 C912               CMP     #18             ; TEST "+" KEY
-1796 F034               BEQ     SETCEL          ; JUMP IF SET CELL KEY
-1798 C90F               CMP     #15             ; TEST "F" KEY
-179A F034               BEQ     CLRCEL          ; JUMP IF CLEAR CELL KEY
-179C 4CD803             JMP     KYPT0           ; IGNORE ANY OTHER KEYS
-
-179F 20E800     CSRD:   JSR     CSRDEL          ; DELETE EXISTING CURSOR
-17A2 C60C               DEC     Y1CORD          ; DECREMENT Y COORDINATE FOR CURSOR DOWN
-17A4 4CC617             JMP     CSRMOV
-
-17A7 20E800     CSRU:   JSR     CSRDEL          ; DELETE EXISTING CURSOR
-17AA E60C               INC     Y1CORD          ; INCREMENT Y COORDINATE FOR CURSOR UP
-17AC 4CC617             JMP     CSRMOV
-
-17AF 20E800     CSRL:   JSR     CSRDEL          ; DELETE EXISTING CURSOR
-17B2 A50A               LDA     X1CORD          ; DECREMENT X COORDINATE FOR CURSOR LEFT
-17B4 D002               BNE     CSRL1
-17B6 C60B               DEC     X1CORD+1
-17B8 C60A       CSRL1:  DEC     X1CORD
-17BA 4CC617             JMP     CSRMOV
-
-17BD 20E800     CSRR:   JSR     CSRDEL          ; DELETE EXISTING CURSOR
-17C0 E60A               INC     X1CORD          ; INCREMENT X COORDINATE FOR CURSOR RIGHT
-17C2 D002               BNE     CSRMOV
-17C4 E60B               INC     X1CORD+1
-
-17C6 20E200     CSRMOV: JSR     CSRINS          ; INSERT CURSOR AT NEW LOCATION
-17C9 4CD803             JMP     KYPT0           ; GO BACK TO KEYBOARD INPUT LOOP
-
-17CC A9FF       SETCEL: LDA     #X'FF           ; SET REAL CELL STATE TO LIVE
-17CE D002               BNE     CLRCL1
-
-17D0 A900       CLRCEL: LDA     #0              ; SET REAL CELL STATE TO DEAD
-17D2 8503       CLRCL1: STA     REALST
-17D4 4CD803             JMP     KYPT0           ; GO BACK TO KEYBOARD INPUT LOOP
-
-17D7 20E800     GO:     JSR     CSRDEL          ; DELETE CURSOR AND RESTORE THE CELL UNDER
-                                                ; THE CURSOR
-17DA 4C0001             JMP     LIFE            ; AND GO EXECUTE LIFE
-
-
-0000                    .END
+                              .PAGE 'DOCUMENTATION, EQUATES, STORAGE'
+    3                ;        MTU VISIBLE MEMORY DEMONSTRATION PROGRAM
+    4                ;        JOSEPH CONWAY'S GAME OF LIFE ON A 320 BY 200 MATRIX
+    5
+    6                ;        ENTRY POINT "DEMO" GENERATES AN INITIAL PATTERN OF CELLS AND
+    7                ;        THEN EXECUTES THE LIFE ALGORITHM ON IT.
+    8
+    9                ;        FOR USER ENTERED PATTERNS, THE SCREEN SHOULD FIRST BE CLEARED
+   10                ;        BY EXECUTING "INIT". THE KIM KEYBOARD MONITOR OR "KYPT" MAY
+   11                ;        THEN BE USED TO ENTER THE INITIAL CELL PATTERN. AFTER PATTERN
+   12                ;        ENTRY, A JUMP TO "LIFE" WILL START COMPUTING THE SUCCEEDING
+   13                ;        GENERATIONS.
+   14
+   15                ;        LIFE MAY BE INTERRUPTED AT THE END OF A GENERATION BY PRESSING
+   16                ;        ANY KEY (EXCEPT RESET OR ST) ON THE KIM KEYPAD AND HOLDING
+   17                ;        UNTIL THE END OF THE GENERATION. THIS WILL TRANSFER CONTROL
+   18                ;        TO "KYPT" FOR USER MODIFICATION OF THE DISPLAYED PATTERN.
+   19
+   20                ;        KYPT IS USED FOR CONVENIENT ENTRY AND MODIFICATION OF CELL
+   21                ;        PATTERNS. WHEN ENTERED, A BLINKING GRAPHIC CURSOR IS
+   22                ;        DISPLAYED IN THE MIDDLE OF THE SCREEN. THE USER MAY MOVE THE
+   23                ;        CURSOR IN ANY DIRECTION AND EITHER SET OR CLEAR CELLS AT THE
+   24                ;        CURRENT CURSOR POSITION. THE CURSOR IS MOSTLY ON IF IT COVERS
+   25                ;        A LIVE CELL AND MOSTLY OFF OTHERWISE.
+   26                ;            THE KIM KEYBOARD IS USED FOR CONTROL OF THE PROGRAM. THE
+   27                ;        FOLLOWING KEYS ARE ACTIVE:
+   28                ;               1  CURSOR DOWN
+   29                ;               6  CURSOR RIGHT
+   30                ;               9  CURSOR UP
+   31                ;               4  CURSOR LEFT
+   32                ;               +  SET A CELL
+   33                ;               F  CLEAR A CELL
+   34                ;               GO GO TO LIFE ROUTINE USING THE CURRENT PATTERN
+   35                ;        PARTICULARLY INTERESTING INITIAL PATTERNS MAY BE SAVED ON KIM
+   36                ;        CASSETTE AND RELOADED LATER FOR DEMONSTRATIONS, ETC.
+   37
+   38                ;        GENERAL EQUATES
+   39
+   40 1C22           KIMMON   =      X'1C22       ; ENTRY TO KIM MONITOR
+   41 1F6A           GETKEY   =      X'1F6A       ; ADDRESS OF MONITOR KEYBOARD READ ROUTINE
+   42 0140           NX       =      320          ; NUMBER OF BITS IN A ROW
+   43 00C8           NY       =      200          ; NUMBER OF ROWS  (CHANGE FOR HALF SCREEN
+   44                                             ; OPERATION)
+   45 FA00           NPIX     =      NX*NY        ; NUMBER OF PIXELS
+   46 0032           DBCDLA   =      50           ; KIM KEYBOARD DEBOUNCE DELAY TIME
+   47
+   48 0000                    .=     0            ; START DEMO PROGRAM AT LOCATION ZERO
+   49
+   50                ;        PARAMETER STORAGE
+   51
+   52 0000 20        VMORG:   .BYTE  X'20         ; FIRST PAGE IN DISPLAY MEMORY
+   53
+   54                ;        MISCELLANEOUS STORAGE
+   55
+   56 0001           NCYSV:   .=.+   1            ; TEMPORARY STORAGE FOR NEIGHBOR COUNT
+   57                                             ; ROUTINE
+   58 0002           NCNT:    .=.+   1            ; COUNT OF LIVE NEIGHBORS
+   59 0003           LNCNT:   .=.+   1            ; CELL LINE COUNTER
+   60 0004           NGEN:    .=.+   1            ; BYTE TO ACCUMULATE NEW CELLS
+   61 0005           ADP1:    .=.+   2            ; ADDRESS POINTER 1
+   62 0007           ADP2:    .=.+   2            ; ADDRESS POINTER 2
+   63 0009           BTPT:    .=.+   1            ; BIT NUMBER
+   64 000A           X1CORD:  .=.+   2            ; COORDINATE PAIR 1
+   65 000C           Y1CORD:  .=.+   2
+   66 000E           X2CORD:  .=.+   2            ; COORDINATE PAIR 2
+   67 0010           Y2CORD:  .=.+   2
+   68 0012           TEMP:    .=.+   2            ; TEMPORARY STORAGE
+   69 0014           FLASHC:  .=.+   2            ; TIME DELAY COUNTER FOR CURSOR FLASHING
+   70 0016           LSTKEY   =      NCYSV        ; CODE OF LAST KEY PRESSED ON KIM KEYBOARD
+   71 0016           DBCNT    =      NCNT         ; KIM KEYBOARD DEBOUNCE COUNTER
+   72 0016           REALST   =      LNCNT        ; STATE OF CELL UNDER THE CURSOR
+   73
+   74                ;        TABLE OF MASKS FOR NEIGHBOR COUNTING
+   75
+   76 0016 01                 .BYTE  X'01
+   77 0017 80402010  MSK:     .BYTE  X'80,X'40,X'20,X'10
+   78 001B 08040201           .BYTE  X'08,X'04,X'02,X'01
+   79 001F 80                 .BYTE  X'80
+   80
+   81                ;        STORAGE TO BUFFER 3 FULL SCAN LINES OF CELLS
+   82
+   83 0020 00                 .BYTE  0
+   84 0021           TR:      .=.+   40           ; ROW ABOVE CENTRAL ROW
+   85 0049           CR:      .=.+   40           ; CENTRAL ROW
+   86 0071           BR:      .=.+   40           ; ROW BELOW CENTRAL ROW
+   87 0099 00                 .BYTE  0
+   88
+                              .PAGE  'INITIAL PATTERN GENERATION ROUTINES'
+   89                ;        CLEAR DISPLAY MEMORY AND INITIALIZE ROUTINE
+   90                ;        USED TO PREPARE SCREEN FOR USER ENTERED PATTERN
+   91
+   92 009A D8        INIT:    CLD                 ; INITIALIZE MACHINE AND DISPLAY
+   93 009B 202C02             JSR    CLEAR        ; CLEAR THE SCREEN
+   94 009E 4C221C             JMP    KIMMON       ; RETURN TO THE MONITOR
+   95
+   96                ;        MAIN DEMO ROUTINE, DRAW INITIAL PATTERN
+   97                ;        DRAWS A FIGURE DEFINED BY "LIST" AND THEN JUMPS TO LIFE
+   98
+   99 00A1 D8        DEMO:    CLD                 ; CLEAR DECIMAL MODE
+  100 00A2 202C02             JSR    CLEAR        ; CLEAR THE SCREEN
+  101 00A5 A200               LDX    #0           ; INITIALIZE INDEX FOR COORDINATE LIST
+  102 00A7 BD3603    DEMO1:   LDA    LIST+1,X     ; GET HIGH BYTE OF X COORDINATE
+  103 00AA 101A               BPL    DEMO2        ; JUMP IF A DRAW COMMAND
+  104 00AC C9FF               CMP    #X'FF        ; IF MOVE, TEST FOR END OF LIST FLAG
+  105 00AE F050               BEQ    LIFE         ; GO TO LIFE IF SO
+  106 00B0 297F               AND    #X'7F        ; DELETE SIGN BIT
+  107 00B2 850B               STA    X1CORD+1     ; FOR MOVE JUST COPY COORDINATES FROM LIST
+  108 00B4 BD3503             LDA    LIST,X       ; INTO X1CORD,Y1CORD
+  109 00B7 850A               STA    X1CORD
+  110 00B9 BD3703             LDA    LIST+2,X
+  111 00BC 850C               STA    Y1CORD
+  112 00BE BD3803             LDA    LIST+3,X
+  113 00C1 850D               STA    Y1CORD+1
+  114 00C3 4CDA00             JMP    DEMO3
+  115 00C6 850F      DEMO2:   STA    X2CORD+1     ; FOR DRAW, COPY COORDINATES FROM LIST
+  116 00C8 BD3503             LDA    LIST,X       ; INTO X2CORD,Y2CORD
+  117 00CB 850E               STA    X2CORD
+  118 00CD BD3703             LDA    LIST+2,X
+  119 00D0 8510               STA    Y2CORD
+  120 00D2 BD3803             LDA    LIST+3,X
+  121 00D5 8511               STA    Y2CORD+1
+  122 00D7 20F502             JSR    SDRAW        ; DRAW LINE FROM X1CORD,Y1CORD TO X2CORD,
+  123 00DA E8        DEMO3:   INX                 ; Y2CORD
+  124 00DB E8                 INX                 ; BUMP INDEX TO NEXT SET OF COORDINATES
+  125 00DC E8                 INX
+  126 00DD E8                 INX
+  127 00DE D0C7               BNE    DEMO1        ; LOOP UNTIL END OF LIST REACHED
+  128 00E0 F01E               BEQ    LIFE         ; GO TO LIFE ROUTINE WHEN DONE
+  129
+  130                ;        CSRINS - INSERT GRAPHIC CURSOR AT X1CORD,Y1CORD
+  131                ;        SAVES STATE OF THE CELL ALREADY THERE IN REALST
+  132
+  133 00E2 20CC02    CSRINS:  JSR    RDPIX        ; READ CURRENT STATE OF CELL UNDER CURSOR
+  134 00E5 8503               STA    REALST       ; SAVE THE STATE
+  135 00E7 60                 RTS                 ; RETURN
+  136
+  137                ;        CSRDEL - DELETE THE GRAPHIC CURSOR AT X1CORD,Y1CORD
+  138                ;        AND RESTORE THE CELL THAT WAS ORIGINALLY THERE
+  139
+  140 00E8 A503      CSRDEL:  LDA    REALST       ; GET SAVED CELL STATE
+  141 00EA 20C402             JSR    WRPIX        ; PUT IT BACK INTO DISPLAY MEMORY
+  142 00ED 60                 RTS                 ; RETURN
+  143
+                              .PAGE   'MAIN LIFE ROUTINE'
+  144 00EE                    .=     X'100
+  145
+  146 0100 A900      LIFE:    LDA    #0           ; PRIME THE THREE LINE BUFFERS
+  147 0102 8505               STA    ADP1         ; INITIALIZE VM POINTER TO TOP OF SCREEN
+  148 0104 A500               LDA    VMORG
+  149 0106 8506               STA    ADP1+1
+  150 0108 201D02             JSR    PRIME        ; DO THE PRIMING
+  151
+  152                ;        MAIN LIFE LOOP
+  153
+  154 010B A9C6               LDA    #198         ; SET THE COUNT OF ROWS TO PROCESS
+  155 010D 8503               STA    LNCNT
+  156 010F A505      LIFE1:   LDA    ADP1         ; INCREMENT THE ADDRESS POINTER TO THE
+  157 0111 18                 CLC                 ; NEXT LINE
+  158 0112 6928               ADC    #40
+  159 0114 8505               STA    ADP1
+  160 0116 9002               BCC    LIFE2
+  161 0118 E606               INC    ADP1+1
+  162 011A 203101    LIFE2:   JSR    LFBUF        ; EXECUTE LIFE ALGORITHM ON CENTRAL ROW
+  163                                             ; IN BUFFER AND UPDATE THE CURRENT ROW IN
+  164                                             ; DISPLAY MEMORY
+  165 011D C603               DEC    LNCNT        ; DECREMENT THE LINE COUNT
+  166 011F F006               BEQ    LIFE3        ; JUMP OUT IF 198 LINES BEEN PROCESSED
+  167 0121 200002             JSR    ROLL         ; ROLL THE BUFFERS UP ONE POSITION
+  168 0124 4C0F01             JMP    LIFE1        ; GO PROCESS THE NEXT LINE
+  169
+  170                ;        END OF GENERATION, TEST KIM KEYBOARD
+  171
+  172 0127 206A1F    LIFE3:   JSR    GETKEY
+  173 012A C915               CMP    #21
+  174 012C B0D2               BCS    LIFE         ; GO FOR NEXT GENERATION IF NO KET PRESSED
+  175 012E 4CC703             JMP    KYPT         ; GO TO KEYBOARD PATTERN ENTRY IF A
+  176                                             ; KEY WAS PRESSED
+  177
+                              .PAGE  'LIFE NEXT GENERATION ROUTINE FOR BUFFER CONTENTS'
+  178                ;        LIFE NEXT GENERATION ROUTINE
+  179                ;        THE CELLS IN THE MIDDLE LINE BUFFER ARE SCANNED AND THEIR
+  180                ;        NEIGHBORS COUNTED TO DETERMINE IF THEY LIVE, DIE, OR GIVE
+  181                ;        BIRTH. THE UPDATED CENTRAL LINE IS STORED BACK INTO DISPLAY
+  182                ;        MEMORY STARTING AT (ADP1).
+  183                ;        TO IMPROVE SPEED, WHEN PROCESSING THE CENTRAL 6 BITS IN A BYTE
+  184                ;        THE ENTIRE BYTE AND ITS NEIGHBORS ARE CHECKED FOR ZERO.
+  185                ;        IF ALL ARE ZERO, THE 6 BITS ARE SKIPPED.
+  186
+  187 0131 A000      LFBUF:   LDY    #0           ; INITIALIZE BYTE ADDRESS
+  188 0133 A207      LFBUF1:  LDX    #7           ; PREPARE FOR THE NEXT BYTE
+  189 0135 A900               LDA    #0           ; ZERO NEXT GEN BYTE
+  190 0137 8504               STA    NGEN
+  191 0139 E006      LFBUF2:  CPX    #6           ; TEST IF TO PROCESS BIT 6
+  192 013B D00D               BNE    LFBUF3       ; JUMP IF NOT
+  193 013D B92100             LDA    TR,Y         ; TEST IF CENTRAL BYTE AND ITS NEIGHBORS
+  194 0140 194900             ORA    CR,Y         ; ARE ALL ZEROES MEANING THAT NO CHANGE IS
+  195 0143 197100             ORA    BR,Y         ; POSSIBLE IN THE CENTRAL 6 BITS OF THE
+  196 0146 D002               BNE    LFBUF3       ; CURRENT BYTE
+  197 0148 A200               LDX    #0           ; IF ZEROES, SKIP 6 CENTRAL BITS
+  198 014A 207501    LFBUF3:  JSR    NCNTC        ; COUNT NEIGHBORS
+  199 014D A502               LDA    NCNT
+  200 014F F01B               BEQ    LFBUF6       ; JUMP IF EXACTLY 3 LIVE NEIGHBORS
+  201 0151 3004               BMI    LFBUF4       ; JUMP IF MORE THAN 3 LIVE NEIGHBORS
+  202 0153 C901               CMP    #1
+  203 0155 F00D               BEQ    LFBUF5       ; JUMP IF EXACTLY 2 LIVE NEIGHBORS
+  204 0157 CA        LFBUF4:  DEX                 ; DECREMENT BIT NUMBER
+  205 0158 10DF               BPL    LFBUF2       ; GO PROCESS NEXT BIT IF NOT DONE WITH BYTE
+  206 015A A504               LDA    NGEN         ; STORE NEXT GENERATION BYTE INTO DISPLAY
+  207 015C 9105               STA    (ADP1),Y     ; MEMORY
+  208 015E C8                 INY                 ; GO TO NEXT BYTE
+  209 015F C028               CPY    #40          ; TEST IF DONE
+  210 0161 D0D0               BNE    LFBUF1       ; LOOP IF NOT
+  211 0163 60                 RTS                 ; OTHERWISE RETURN
+  212
+  213 0164 B94900    LFBUF5:  LDA    CR,Y         ; WHEN EXACTLY 2 NEIGHBORS, TEST CURRENT
+  214 0167 3517               AND    MSK,X        ; CELL
+  215 0169 4C6E01             JMP    LFBUF7       ; NEW CELL IF CURRENT CELL IS ALIVE
+  216
+  217 016C B517      LFBUF6:  LDA    MSK,X        ; CREATE A CELL IN THE NEXT GENERATION
+  218 016E 0504      LFBUF7:  ORA    NGEN
+  219 0170 8504               STA    NGEN
+  220 0172 4C5701             JMP    LFBUF4
+  221
+                              .PAGE 'NEIGHBOR COUNT ROUTINE'
+  222                ;        NEIGHBOR COUNT ROUTINE FOR ALL EIGHT NEIGHBORS OF A CENTRAL
+  223                ;        CELL. USES THREE SCAN LINE BUFFER IN BASE PAGE FOR MAXIMUM
+  224                ;        SPEED. INDEX Y POINTS TO BYTE CONTAINING CENTRAL CELL
+  225                ;        RELATIVE TO BEGINNING OF CENTRAL SCAN LINE. INDEX X HAS BIT
+  226                ;        NUMBER OF CENTRAL CELL, O=LEFTMOST IN BYTE. EXITS WITH 3-N IN
+  227                ;        NCNT WHERE N IS NUMBER OF LIVE NEIGHBORS. PRESERVES X AND Y.
+  228
+  229 0175 8401      NCNTC:   STY    NCYSV        ; SAVE Y
+  230 0177 A903               LDA    #3           ; INITIALIZE THE NEIGHBOR COUNT
+  231 0179 8502               STA    NCNT
+  232 017B B92100    N1:      LDA    TR,Y         ; CHECK CELLS DIRECTLY ABOVE AND BELOW
+  233 017E 3517               AND    MSK,X        ; CENTRAL CELL FIRST
+  234 0180 F002               BEQ    N2
+  235 0182 C602               DEC    NCNT
+  236 0184 B97100    N2:      LDA    BR,Y
+  237 0187 3517               AND    MSK,X
+  238 0189 F002               BEQ    N3
+  239 018B C602               DEC    NCNT
+  240 018D E000      N3:      CPX    #0           ; TEST COLUMN OF 3 LEFT CELLS NEXT
+  241 018F D001               BNE    N3A          ; SKIP AHEAD IF IN THE SAME BYTE
+  242 0191 88                 DEY                 ; OTHERWISE MOVE 1 BYTE LEFT
+  243 0192 B92100    N3A:     LDA    TR,Y
+  244 0195 3516               AND    MSK-1,X
+  245 0197 F002               BEQ    N4
+  246 0199 C602               DEC    NCNT
+  247 019B B94900    N4:      LDA    CR,Y
+  248 019E 3516               AND    MSK-1,X
+  249 01A0 F004               BEQ    N5
+  250 01A2 C602               DEC    NCNT
+  251 01A4 302F               BMI    NCXIT        ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
+  252 01A6 B97100    N5:      LDA    BR,Y
+  253 01A9 3516               AND    MSK-1,X
+  254 01AB F004               BEQ    N6
+  255 01AD C602               DEC    NCNT
+  256 01AF 3024               BMI    NCXIT        ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
+  257 01B1 A401      N6:      LDY    NCYSV        ; RESTORE Y
+  258 01B3 E007               CPX    #7           ; TEST COLUMN OF 3 RIGHT CELLS LAST
+  259 01B5 D001               BNE    N6A          ; SKIP AHEAD IF IN THE SAME BYTE
+  260 01B7 C8                 INY                 ; OTHERWISE MOVE 1 BYTE RIGHT
+  261 01B8 B92100    N6A:     LDA    TR,Y
+  262 01BB 3518               AND    MSK+1,X
+  263 01BD F004               BEQ    N7
+  264 01BF C602               DEC    NCNT
+  265 01C1 3012               BMI    NCXIT        ; QUICK EXIT IF MORE THAN 3 NEIGHBORS
+  266 01C3 B94900    N7:      LDA    CR,Y
+  267 01C6 3518               AND    MSK+1,X
+  268 01C8 F002               BEQ    N8
+  269 01CA C602               DEC    NCNT
+  270 01CC B97100    N8:      LDA    BR,Y
+  271 01CF 3518               AND    MSK+1,X
+  272 01D1 F002               BEQ    NCXIT
+  273 01D3 C602               DEC    NCNT
+  274 01D5 A401      NCXIT:   LDY    NCYSV        ; RESTORE Y
+  275 01D7 60                 RTS                 ; AND RETURN
+  276
+                              .PAGE  'CELL LINE MOVE ROUTINES'
+  277                ;        ROLL THE THREE LINE BUFFERS UP ONE POSITION
+  278                ;        AND BRING IN A NEW LINE FROM DISPLAY MEMORY STARTING AT
+  279                ;        (ADP1) +80 PRESERVES INDEX REGISTERS
+  280
+  281 01D8                    .=     X'200
+  282 0200 98        ROLL:    TYA                 ; SAVE INDEX Y
+  283 0201 48                 PHA
+  284 0202 A050               LDY    #80          ; INITIALIZE INDEX
+  285 0204 B9F9FF    ROLL1:   LDA    CR-80,Y      ; ROLL A BYTE
+  286 0207 99D1FF             STA    TR-80,Y
+  287 020A B92100             LDA    BR-80,Y
+  288 020D 99F9FF             STA    CR-80,Y
+  289 0210 B105               LDA    (ADP1),Y
+  290 0212 992100             STA    BR-80,Y
+  291 0215 C8                 INY                 ; INCREMENT INDEX
+  292 0216 C078               CPY    #120         ; TEST IF 40 BYTES ROLLED
+  293 0218 D0EA               BNE    ROLL1        ; LOOP IF NOT
+  294 021A 68                 PLA                 ; RESTORE Y
+  295 021B A8                 TAY
+  296 021C 60                 RTS                 ; RESTURN
+  297
+  298                ;        PRIME THE LINE BUFFERS WITH THE FIRST THREE LINES OF DISPLAY
+  299                ;        MEMORY
+  300                ;        MOVES 120 BYTES STARTING AT (ADP1) INTO LINE BUFFERS STARTING
+  301                ;        AT TR
+  302
+  303 021D 98        PRIME:   TYA                 ; SAVE INDEX Y
+  304 021E 48                 PHA
+  305 021F A077               LDY    #119         ; INITIALIZE INDEX
+  306 0221 B105      PRIME1:  LDA    (ADP1),Y     ; MOVE A BYTE
+  307 0223 992100             STA     TR,Y
+  308 0226 88                 DEY                 ; DECREMENT INDEX
+  309 0227 10F8               BPL    PRIME1       ; LOOP IF NOT DONE
+  310 0229 68                 PLA                 ; RESTORE Y
+  311 022A A8                 TAY
+  312 022B 60                 RTS                 ; RETURN
+  313
+  314                ;        CLEAR DISPLAY MEMORY ROUTINE
+  315
+  316 022C A000      CLEAR:   LDY    #0           ; INITIALIZE ADDRESS POINTER
+  317 022E 8405               STY    ADP1         ; AND ZERO INDEX Y
+  318 0230 A500               LDA    VMORG
+  319 0232 8506               STA    ADP1+1
+  320 0234 18                 CLC
+  321 0235 6920               ADC    #X'20
+  322 0237 AA                 TAX
+  323 0238 98        CLEAR1:  TYA                 ; CLEAR A BYTE
+  324 0239 9105               STA    (ADP1),Y
+  325 023B E605               INC    ADP1         ; INCREMENT ADDRESS POINTER
+  326 023D D0F9               BNE    CLEAR1
+  327 023F E606               INC    ADP1+1
+  328 0241 E406               CPX    ADP1+1       ; TEST IF DONE
+  329 0243 D0F3               BNE    CLEAR1
+  330 0245 60                 RTS                 ; RETURN
+  331
+                              .PAGE  'GRAPHICS ROUTINES FOR GENERATING THE INITIAL PATTERN'
+  332                ;        PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
+  333                ;                 X1CORD, Y1CORD
+  334                ;        PUTS BYTE ADDRESS IN ADP1 AND BIT NUMBER (BIT 0 IS LEFTMOST)
+  335                ;        IN BTPT.
+  336                ;        DOES NOT CHECK MAGNITUDE OF COORDINATES FOR MAXIMUM SPEED
+  337                ;        PRESERVES X AND Y REGISTERS, DESTROYS A
+  338                ;        BYTE ADDRESS = VMORG*256+(199-Y1CORD)*40+INT(XCORD/8)
+  339                ;        BIT ADDRESS = REM(XCORD/8)
+  340                ;        OPTIMIZED FOR SPEED THEREFORE CALLS TO A DOUBLE SHIFT ROUTINE
+  341                ;        ARE NOT DONE
+  342
+  343 0246 A50A      PIXADR:  LDA    X1CORD       ; COMPUTE BIT ADDRESS FIRST
+  344 0248 8505               STA    ADP1         ; ALSO TRANSFER X1CORD TO ADP1
+  345 024A 2907               AND    #X'07        ; WHICH IS SIMPLY THE LOW 3 BITS OF X
+  346 024C 8509               STA    BTPT
+  347 024E A50B               LDA    X1CORD+1     ; FINISH TRANSFERRING X1CORD TO ADP1
+  348 0250 8506               STA    ADP1+1
+  349 0252 4606               LSR    ADP1+1       ; DOUBLE SHIFT ADP1 RIGHT 3 TO GET
+  350 0254 6605               ROR    ADP1         ; INT(XCORD/8)
+  351 0256 4606               LSR    ADP1+1
+  352 0258 6605               ROR    ADP1
+  353 025A 4606               LSR    ADP1+1
+  354 025C 6605               ROR    ADP1
+  355 025E A9C7               LDA    #199         ; TRANSFER (199-Y1CORD) TO ADP2
+  356 0260 38                 SEC                 ; AND TEMPORARY STORAGE
+  357 0261 E50C               SBC    Y1CORD
+  358 0263 8507               STA    ADP2
+  359 0265 8512               STA    TEMP
+  360 0267 A900               LDA    #0
+  361 0269 E50D               SBC    Y1CORD+1
+  362 026B 8508               STA    ADP2+1
+  363 026D 8513               STA    TEMP+1
+  364 026F 0607               ASL    ADP2         ; COMPUTE 40*(199-Y1CORD)
+  365 0271 2608               ROL    ADP2+1       ;  2*(199-Y1CORD)
+  366 0273 0607               ASL    ADP2
+  367 0275 2608               ROL    ADP2+1       ;  4*(199+Y1CORD)
+  368 0277 A507               LDA    ADP2         ;  ADD IN TEMPORARY SAVE OF (199-Y1CORD)
+  369 0279 18                 CLC                 ;  TO MAKE 5*(199-Y1CORD)
+  370 027A 6512               ADC    TEMP
+  371 027C 8507               STA    ADP2
+  372 027E A508               LDA    ADP2+1
+  373 0280 6513               ADC    TEMP+1
+  374 0282 8508               STA    ADP2+1       ;  5*(199-Y1CORD)
+  375 0284 0607               ASL    ADP2         ;  10*(199-Y1CORD)
+  376 0286 2608               ROL    ADP2+1
+  377 0288 0607               ASL    ADP2         ;  20*(199-Y1CORD)
+  378 028A 2608               ROL    ADP2+1
+  379 028C 0607               ASL    ADP2         ;  40*(199-Y1CORD)
+  380 028E 2608               ROL    ADP2+1
+  381 0290 A507               LDA    ADP2         ; ADD IN INT(X1CORD/8) COMPUTED EARLIER
+  382 0292 18                 CLC
+  383 0293 6505               ADC    ADP1
+  384 0295 8505               STA    ADP1
+  385 0297 A508               LDA    ADP2+1
+  386 0299 6506               ADC    ADP1+1
+  387 029B 6500               ADC    VMORG        ; ADD IN VMORG*256
+  388 029D 8506               STA    ADP1+1       ; FINAL RESULT
+  389 029F 60                 RTS                 ; RETURN
+  390
+  391                ;        STPIX - SETS THE PIXEL AT X1CORD,Y1CORD TO A ONE (WHITE DOT)
+  392                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  393                ;        PRESERVES X AND Y
+  394                ;        ASSUMES IN RANGE CORRDINATES
+  395
+  396 02A0 204602    STPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+  397                                             ; INTO ADP1
+  398 02A3 98                 TYA                 ; SAVE Y
+  399 02A4 48                 PHA
+  400 02A5 A409               LDY    BTPT         ; GET BIT NUMBER IN Y
+  401 02A7 B9E502             LDA    MSKTB1,Y     ; GET A BYTE WITH THAT BIT =1, OTHERS =0
+  402 02AA A000               LDY    #0           ; ZERO Y
+  403 02AC 1105               ORA    (ADP1),Y     ; COMBINE THE BIT WITH THE ADDRESSED VM
+  404                                             ; BYTE
+  405 02AE 4CBF02             JMP    CLPIX1       ; GO STORE RESULT, RESTORE Y, AND RETURN
+  406
+  407                ;        CLPIX - CLEARS THE PIXEL AT X1CORD,Y1CORD TO A ZERO (BLACK DOT
+  408                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  409                ;        PRESERVES X AND Y
+  410                ;        ASSUMES IN RANGE COORDINATES
+  411
+  412 02B1 204602    CLPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+  413                                             ; INTO ADP1
+  414 02B4 98                 TYA                 ; SAVE Y
+  415 02B5 48                 PHA
+  416 02B6 A409               LDY    BTPT         ; GET BIT NUMBER IN Y
+  417 02B8 B9ED02             LDA    MSKTB2,Y     ; GET A BYTE WITH THAT BIT =0, OTHERS =1
+  418 02BB A000               LDY    #0           ; ZERO Y
+  419 02BD 3105               AND    (ADP1),Y     ; REMOVE THE BIT FROM THE ADDRESSED VM
+  420 02BF 9105      CLPIX1:  STA    (ADP1),Y     ; BYTE
+  421 02C1 68                 PLA                 ; RESTORE Y
+  422 02C2 A8                 TAY
+  423 02C3 60                 RTS                 ; AND RETURN
+  424
+  425                ;        WRPIX - SETS THE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE STATE
+  426                ;        OF BIT 0 (RIGHTMOST) OF A
+  427                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  428                ;        PRESERVES X AND Y
+  429                ;        ASSUMES IN RANGE CORRDINATES
+  430
+  431 02C4 2CCB02    WRPIX:   BIT    WRPIXM       ; TEST LOW BIT OF A
+  432 02C7 F0E8               BEQ    CLPIX        ; JUMP IF A ZERO TO BE WRITTEN
+  433 02C9 D0D5               BNE    STPIX        ; OTHERWISE WRITE A ONE
+  434
+  435 02CB 01        WRPIXM:  .BYTE  1            ; BIT TEST MASK FOR BIT 0
+  436
+  437                ;        RDPIX - READS THE PIXEL AT X1CORD,Y1CORD AND SETS A TO ALL
+  438                ;        ZEROES IF IT IS A ZERO OR TO ALL ONES IF IT IS A ONE
+  439                ;        LOW BYTE OF ADP1 IS EQUAL TO A ON RETURN
+  440                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  441                ;        PRESERVES X AND Y
+  442                ;        ASSUMES IN RANGE CORRDINATES
+  443
+  444 02CC 204602    RDPIX:   JSR    PIXADR       ; GET BYTE AND BIT ADDRESS OF PIXEL
+  445 02CF 98                 TYA                 ; SAVE Y
+  446 02D0 48                 PHA
+  447 02D1 A000               LDY    #0           ; GET ADDRESSED BYTE FROM VM
+  448 02D3 B105               LDA    (ADP1),Y
+  449 02D5 A409               LDY    BTPT         ; GET BIT NUMBER IN Y
+  450 02D7 39E502             AND    MSKTB1,Y     ; CLEAR ALL BUT ADDRESSED BIT
+  451 02DA F002               BEQ    RDPIX1       ; SKIP AHEAD IF IT WAS A ZERO
+  452 02DC A9FF               LDA    #X'FF        ; SET TO ALL ONES IF IT WAS A ONE
+  453 02DE 8505      RDPIX1:  STA    ADP1         ; SAVE A TEMPORARILY IN ADP1 WHILE
+  454 02E0 68                 PLA                 ; RESTORING Y
+  455 02E1 A8                 TAY
+  456 02E2 A505               LDA    ADP1
+  457 02E4 60                 RTS                 ; RETURN
+  458
+  459                ;        MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
+  460                ;        MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
+  461                ;        MSKTB2 IS A TABLE OF 0 BITS CORRESPONDING TO BIT NUMBERS
+  462
+  463 02E5 80402010  MSKTB1:  .BYTE  X'80,X'40,X'20,X'10
+  464 02E9 08040201           .BYTE  X'08,X'04,X'02,X'01
+  465 02ED 7FBFDFEF  MSKTB2:  .BYTE  X'7F,X'BF,X'DF,X'EF
+  466 02F1 F7FBFDFE           .BYTE  X'F7,X'FB,X'FD,X'FE
+  467
+  468                ;        SDRAW - SIMPLIFIED DRAW ROUTINE
+  469                ;        DRAWS A LINE FROM X1CORD,Y1CORD TO X2CORD,Y2CORD
+  470                ;        WHEN DONE COPIES X2CORD AND Y2CORD INTO X1CORD AND Y1CORD
+  471                ;        RESTRICTED TO HORIZONTAL, VERTICAL, AND 45 DEGREE DIAGONAL
+  472                ;        LINES (SLOPE=1)
+  473                ;        PRESERVES BOTH INDEX REGISTERS
+  474
+  475 02F5 8A        SDRAW:   TXA                 ; SAVE INDEX REGS
+  476 02F6 48                 PHA
+  477 02F7 98                 TYA
+  478 02F8 48                 PHA
+  479 02F9 20A002             JSR    STPIX        ; PUT A DOT AT INITIAL ENDPOINT
+  480 02FC A000      SDRAW1:  LDY    #0           ; CLEAR "SOMETHING DONE" FLAG
+  481 02FE A200               LDX    #0           ; UPDATE X COORDINATE
+  482 0300 201303             JSR    UPDC
+  483 0303 A202               LDX    #Y1CORD-X1CORD;UPDATE Y COORDINATE
+  484 0305 201303             JSR    UPDC
+  485 0308 20A002             JSR    STPIX        ; PUT A DOT AT INTERMEDIATE POINT
+  486 030B 88                 DEY                 ; TEST IF EITHER COORDINATE CHANGED
+  487 030C 10EE               BPL    SDRAW1       ; ITERATE AGAIN IF SO
+  488 030E 68                 PLA                 ; RESTORE INDEX REGISTERS
+  489 030F A8                 TAY
+  490 0310 68                 PLA
+  491 0311 AA                 TAX
+  492 0312 60                 RTS                 ; RETURN
+  493
+  494                ;        INTERNAL SUBROUTINE FOR UPDATING COORDINATES
+  495
+  496 0313 B50F      UPDC:    LDA    X2CORD+1,X   ; COMPARE ENDPOINT WITH CURRENT POSITION
+  497 0315 D50B               CMP    X1CORD+1,X
+  498 0317 9012               BCC    UPDC3        ; JUMP IF CURRENT POSITION IS LARGER
+  499 0319 D008               BNE    UPDC1        ; JUMP IF ENDPOINT IS LARGER
+  500 031B B50E               LDA    X2CORD,X
+  501 031D D50A               CMP    X1CORD,X
+  502 031F 900A               BCC    UPDC3        ; JUMP IF CURRENT POSITION IS LARGER
+  503 0321 F011               BEQ    UPDC5        ; GO RETURN IF EQUAL
+  504 0323 F60A      UPDC1:   INC    X1CORD,X     ; ENDPOINT IS LARGER, INCREMENT CURRENT
+  505 0325 D002               BNE    UPDC2        ; POSITION
+  506 0327 F60B               INC    X1CORD+1,X
+  507 0329 C8        UPDC2:   INY                 ; SET "DONE SOMETHING" FLAG
+  508 032A 60                 RTS                 ; RETURN
+  509 032B B50A      UPDC3:   LDA    X1CORD,X     ; CURRENT POSITION IS LARGER, DECREMENT
+  510 032D D002               BNE    UPDC4        ; CURRENT POSITION
+  511 032F D60B               DEC    X1CORD+1,X
+  512 0331 D60A      UPDC4:   DEC    X1CORD,X
+  513 0333 C8                 INY                 ; SET "DONE SOMETHING" FLAG
+  514 0334 60        UPDC5:   RTS                 ; RETURN
+  515
+                              .PAGE  'COORDINATE LIST FOR DRAWING INITIAL FIGURE'
+  516                ;        COORDINATE LIST DEFINING THE INITIAL PATTERN FOR LIFE
+  517                ;        EACH VERTEX IN THE FIGURE IS REPRESENTED BY 4 BYTES
+  518                ;        THE FIRST TWO BYTES ARE THE X COORDINATE OF THE NEXT ENDPOINT
+  519                ;        AND THE NEXT TWO BYTES ARE THE Y COORDINATE.
+  520                ;        IF THE HIGH BYTE OF X HAS THE SIGN BIT ON, A MOVE FROM THE
+  521                ;        CURRENT POSITION TO THE NEW POSITION IS DONE (THE SIGN BIT IS
+  522                ;        IS DELETED BEFORE MOVING)
+  523                ;        IF THE HIGH BYTE OF X HAS THE SIGN BIT OFF, A DRAW FROM THE
+  524                ;        CURRENT POSITION TO THE NEW POSITION IS DONE.
+  525                ;        IF THE HIGH BYTE OF X = X'FF, IT IS THE END OF THE LIST.
+  526
+  527 0335 38803C00  LIST:    .WORD  56+X'8000,60   ; 1     MOVE
+  528 0339 38008C00           .WORD  56,140         ; 2     DRAW
+  529 033D 48008C00           .WORD  72,140         ; 3     DRAW
+  530 0341 48004C00           .WORD  72,76          ; 4
+  531 0345 68004C00           .WORD  104,76         ; 5
+  532 0349 68003C00           .WORD  104,60         ; 6
+  533 034D 38003C00           .WORD  56,60          ; 7
+  534 0351 78803C00           .WORD  120+X'8000,60  ; 8     MOVE
+  535 0355 78008C00           .WORD  120,140        ; 9
+  536 0359 88008C00           .WORD  136,140        ; 10
+  537 035D 88003C00           .WORD  136,60         ; 11
+  538 0361 78003C00           .WORD  120,60         ; 12
+  539 0365 98803C00           .WORD  152+X'8000,60  ; 13    MOVE
+  540 0369 98008C00           .WORD  152,140        ; 14
+  541 036D C8008C00           .WORD  200,140        ; 15
+  542 0371 C8007C00           .WORD  200,124        ; 16
+  543 0375 A8007C00           .WORD  168,124        ; 17
+  544 0379 A8006C00           .WORD  168,108        ; 18
+  545 037D C0006C00           .WORD  192,108        ; 19
+  546 0381 C0005C00           .WORD  192,92         ; 20
+  547 0385 A8005C00           .WORD  168,92         ; 21
+  548 0389 A8003C00           .WORD  168,60         ; 22
+  549 038D 98003C00           .WORD  152,60         ; 23
+  550 0391 D8803C00           .WORD  216+X'8000,60  ; 24    MOVE
+  551 0395 D8008C00           .WORD  216,140        ; 25
+  552 0399 08018C00           .WORD  264,140        ; 26
+  553 039D 08017C00           .WORD  264,124        ; 27
+  554 03A1 E8007C00           .WORD  232,124        ; 28
+  555 03A5 E8006C00           .WORD  232,108        ; 29
+  556 03A9 00016C00           .WORD  256,108        ; 30
+  557 03AD 00015C00           .WORD  256,92         ; 31
+  558 03B1 E8005C00           .WORD  232,92         ; 32
+  559 03B5 E8004C00           .WORD  232,76         ; 33
+  560 03B9 08014C00           .WORD  264,76         ; 34
+  561 03BD 08013C00           .WORD  264,60         ; 35
+  562 03C1 D8003C00           .WORD  216,60         ; 36
+  563 03C5 FFFF               .WORD  X'FFFF         ; END OF LIST
+  564
+                              .PAGE  'KEYBOARD PATTERN ENTRY ROUTINES'
+  565                ;        KEYBOARD PATTERN ENTRY ROUTINES
+  566                ;        USES THE KIM KEYBOARD AND A CURSOR TO SIMPLIFY THE ENTRY
+  567                ;        OF INITIAL LIFE PATTERNS
+  568
+  569 03C7 A900      KYPT:    LDA    #0           ; SET INITIAL CURSOR POSITION IN CENTER
+  570 03C9 850B               STA    X1CORD+1     ; OF SCREEN
+  571 03CB 850D               STA    Y1CORD+1
+  572 03CD A9A0               LDA    #160
+  573 03CF 850A               STA    X1CORD
+  574 03D1 A964               LDA    #100
+  575 03D3 850C               STA    Y1CORD
+  576 03D5 20E200             JSR    CSRINS       ; INSERT A CURSOR ON THE SCREEN
+  577 03D8 A932      KYPT0:   LDA    #DBCDLA      ; RESET THE DEBOUNCE COUNT
+  578 03DA 8502               STA    DBCNT
+  579 03DC E614      KYPT1:   INC    FLASHC       ; DOUBLE INCREMENT CURSOR FLASH COUNT
+  580 03DE D002               BNE    KYPT2
+  581 03E0 E615               INC    FLASHC+1
+  582
+  583                ;        GENERATE A 25% DUTY CURSOR IF CELL IS DEAD AND 75% IF ALIVE
+  584
+  585 03E2 A515      KYPT2:   LDA    FLASHC+1     ; GET HIGH BYTE OF FLASH COUNTER
+  586 03E4 4A                 LSRA                ; COMPUTE LOGICAL "AND" OF BITS O AND 1
+  587 03E5 2515               AND    FLASHC+1     ; IN ACC BIT 0
+  588 03E7 4503               EOR    REALST       ; EXCLUSIVE-OR WITH REAL STATE OF CELL
+  589 03E9 20C402             JSR    WRPIX        ; DISPLAY THE CURSOR
+  590
+  591                ;        READ KIM KEYBOARD AND DETECT ANY CHANGE IN KEYS PRESSED
+  592
+  593 03EC 206A1F             JSR    GETKEY       ; GET CURRENT PRESSED KEY
+  594 03EF C501               CMP    LSTKEY       ; TEST IF SAME AS BEFORE
+  595 03F1 F0E5               BEQ    KYPT0        ; IGNORE IF SO
+  596 03F3 C602               DEC    DBCNT        ; IF DIFFERENT, DECREMENT AND TEST
+  597 03F5 10E5               BPL    KYPT1        ; DEBOUNCE COUNT AND IGNORE KEY IF NOT RUN
+  598                                             ; OUT
+  599 03F7 8501               STA    LSTKEY       ; AFTER DEBOUNCE, UPDATE KEY LAST PRESSED
+  600 03F9 4C8017             JMP    KYPT6        ; AND GO PROCESS THE KEYSTROKE
+  601
+  602 03FC                    .=     X'1780       ; CONTINUE PROGRAM IN 6530 RAM
+  603
+  604 1780 C901      KYPT6:   CMP    #1           ; TEST "1" KEY
+  605 1782 F01B               BEQ    CSRD         ; JUMP IF CURSOR DOWN
+  606 1784 C909               CMP    #9           ; TEST "9" KEY
+  607 1786 F01F               BEQ    CSRU         ; JUMP IF CURSOR UP
+  608 1788 C904               CMP    #4           ; TEST "4" KEY
+  609 178A F023               BEQ    CSRL         ; JUMP IF CURSOR LEFT
+  610 178C C906               CMP    #6           ; TEST "6" KEY
+  611 178E F02D               BEQ    CSRR         ; JUMP IF CURSOR RIGHT
+  612 1790 C913               CMP    #19          ; TEST "GO" KEY
+  613 1792 F043               BEQ    GO           ; JUMP IF GO KEY
+  614 1794 C912               CMP    #18          ; TEST "+" KEY
+  615 1796 F034               BEQ    SETCEL       ; JUMP IF SET CELL KEY
+  616 1798 C90F               CMP    #15          ; TEST "F" KEY
+  617 179A F034               BEQ    CLRCEL       ; JUMP IF CLEAR CELL KEY
+  618 179C 4CD803             JMP    KYPT0        ; IGNORE ANY OTHER KEYS
+  619
+  620 179F 20E800    CSRD:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+  621 17A2 C60C               DEC    Y1CORD       ; DECREMENT Y COORDINATE FOR CURSOR DOWN
+  622 17A4 4CC617             JMP    CSRMOV
+  623
+  624 17A7 20E800    CSRU:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+  625 17AA E60C               INC    Y1CORD       ; INCREMENT Y COORDINATE FOR CURSOR UP
+  626 17AC 4CC617             JMP    CSRMOV
+  627
+  628 17AF 20E800    CSRL:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+  629 17B2 A50A               LDA    X1CORD       ; DECREMENT X COORDINATE FOR CURSOR LEFT
+  630 17B4 D002               BNE    CSRL1
+  631 17B6 C60B               DEC    X1CORD+1
+  632 17B8 C60A      CSRL1:   DEC    X1CORD
+  633 17BA 4CC617             JMP    CSRMOV
+  634
+  635 17BD 20E800    CSRR:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+  636 17C0 E60A               INC    X1CORD       ; INCREMENT X COORDINATE FOR CURSOR RIGHT
+  637 17C2 D002               BNE    CSRMOV
+  638 17C4 E60B               INC    X1CORD+1
+  639
+  640 17C6 20E200    CSRMOV:  JSR    CSRINS       ; INSERT CURSOR AT NEW LOCATION
+  641 17C9 4CD803             JMP    KYPT0        ; GO BACK TO KEYBOARD INPUT LOOP
+  642
+  643 17CC A9FF      SETCEL:  LDA    #X'FF        ; SET REAL CELL STATE TO LIVE
+  644 17CE D002               BNE    CLRCL1
+  645
+  646 17D0 A900      CLRCEL:  LDA    #0           ; SET REAL CELL STATE TO DEAD
+  647 17D2 8503      CLRCL1:  STA    REALST
+  648 17D4 4CD803             JMP    KYPT0        ; GO BACK TO KEYBOARD INPUT LOOP
+  649
+  650 17D7 20E800    GO:      JSR    CSRDEL       ; DELETE CURSOR AND RESTORE THE CELL UNDER
+  651                                             ; THE CURSOR
+  652 17DA 4C0001             JMP    LIFE         ; AND GO EXECUTE LIFE
+  653
+  654
+  655 0000                    .END
+NO ERROR LINES
