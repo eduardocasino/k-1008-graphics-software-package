@@ -1,0 +1,1649 @@
+
+                              .PAGE 'DOCUMENTATION, EQUATES, STORAGE'
+    3
+    4                ;        THIS PACKAGE PROVIDES FUNDAMENTAL GRAPHICS ORIENTED
+    5                ;        SUBROUTINES NEEDED FOR EFFECTIVE USE OF THE VISIBLE MEMORY AS
+    6                ;        A GRAPHIC DISPLAY DEVICE.  MAJOR SUBROUTINES INCLUDED ARE AS
+    7                ;        FOLLOWS:
+    8                ;           CLEAR - CLEARS THE ENTIRE VISIBLE MEMORY AS DEFINED BY
+    9                ;                   NPIX/8
+   10                ;           PIXADR- RETURNS BYTE AND BIT ADDRESS OF PIXEL AT X1CORD,
+   11                ;                   Y1CORD
+   12                ;           CKCRD1- PERFORM A RANGE CHECK ON X1CORD,Y1CORD
+   13                ;           CKCRD2- PERFORM A RANGE CHECK ON X2CORD,Y2CORD
+   14                ;           STPIX - SET PIXEL AT X1CORD,Y1CORD TO A ONE (WHITE DOT)
+   15                ;           CLPIX - CLEAR PIXEL AT X1CORD,Y1CORD TO ZERO (BLACK DOT)
+   16                ;           FLPIX - FLIP THE PIXEL AT X1CORD,Y1CORD
+   17                ;           WRPIX - UPDATE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE
+   18                ;                   STATE OF THE ACCUMULATOR
+   19                ;           RDPIX - COPY THE STATE OF THE PIXEL AT X1CORD,Y1CORD INTO
+   20                ;                   THE ACCUMULATOR
+   21                ;           DRAW -  DRAW THE BEST STRAIGHT LINE FROM X1CORD,Y1CORD
+   22                ;                   TO X2CORD,Y2CORD. X2CORD,Y2CORD COPIED TO
+   23                ;                   X1CORD,Y1CORD AFTER DRAWING
+   24                ;           ERASE - SAME AS DRAW EXCEPT A BLACK LINE IS DRAWN
+   25                ;           DCHAR - DISPLAYS A CHARACTER WHOSE UPPER LEFT CORNER IS
+   26                ;                   X1CORD,Y1CORD. CHARACTER MATRIX IS 5 WIDE BY 9
+   27                ;                   HIGH INCLUDING LOWER CASE DESCENDERS BUT NOT
+   28                ;                   INCLUDING CHARACTER AND LINE SPACING.
+   29                ;           DTEXT - ACCEPTS ASCII CHARACTERS AND FORMATS THEM INTO
+   30                ;                   TEXT. A STANDARD (BUT EASILY MODIFIED) CHARACTER
+   31                ;                   FIELD 6 WIDE BY 11 HIGH ALLOWS UP TO 18 LINES OF 53
+   32                ;                   CHARACTERS. SUBSCRIPT AND SUPERSCRIPT VIA CONTROL
+   33                ;                   CHARACTERS IS IMPLEMENTED.
+   34                ;           DTXTIN- INITIALIZE PARAMETERS FOR USE OF DTEXT ON FULL
+   35                ;                   SCREEN.
+   36                ;
+   37                ;        ALL SUBROUTINES DEPEND ON ONE OR TWO PAIRS OF COORDINATES.
+   38                ;        EACH COORDINATE IS A DOUBLE PRECISION, UNSIGNED NUMBER WITH
+   39                ;        THE LOW BYTE FIRST (I.E.  LIKE MEMORY ADDRESSES IN THE 6502)
+   40                ;        THE ORIGIN OF THE COORDINATE SYSTEM IS AT THE LOWER LEFT
+   41                ;        CORNER OF THE SCREEN THEREFORE THE ENITRE SCREEN IS IN THE
+   42                ;        FIRST QUADRANT.  ALLOWABLE RANGE OF THE X COORDINATE IS 0 TO
+   43                ;        319 (DECIMAL) AND THE RANGE OF THE Y COORDINATE IS 0 TO 199.
+   44                ;        FOR MAXIMUM SPEED ALL SUBROUTINES ASSUME THAT THE COORDINATE
+   45                ;        VALUES ARE IN RANGE.  IF THEY ARE NOT, WILD STORING INTO ANY
+   46                ;        PART OF KIM RAM IS POSSIBLE.  FOR DEBUGGING, CALLS TO CKCRD1
+   47                ;        AND CKCRD2 SHOULD BE PERFORMED PRIOR TO GRAPHIC ROUTINE CALLS
+   48                ;        IN ORDER TO DETECT AND CORRECT ERRONEOUS COORDINATE VALUES.
+   49
+   50                ;        GENERAL EQUATES
+   51
+   52 0140           NX       =      320          ; NUMBER OF BITS IN A ROW
+   53 00C8           NY       =      200          ; NUMBER OF ROWS  (CHANGE FOR HALF SCREEN
+   54                                             ; OPERATION)
+   55 FA00           NPIX     =      NX*NY        ; NUMBER OF PIXELS
+   56 000B           CHHIW    =      11           ; HEIGHT OF CHARACTER WINDOW
+VMSUP  K-1008 VM GRAPHIC SUP
+DOCUMENTATION, EQUATES, STORAGE
+
+   57 0006           CHWIDW   =      6            ; WIDTH OF CHARACTER WINDOW
+   58 0009           CHHIM    =      9            ; HEIGHT OF CHARACTER MATRIX
+   59 0005           CHWIDM   =      5            ; WIDTH OF CHARACTER MATRIX
+   60
+   61                ;        BASE PAGE TEMPORARY STORAGE (MAY BE DESTROYED BETWEEN CALLS)
+   62
+   63 0000                    .=     X'EA
+   64
+   65 00EA           ADP1:    .=.+   2            ; ADDRESS POINTER 1
+   66 00EC           ADP2:    .=.+   2            ; ADDRESS POINTER 2
+   67
+   68                ;        PERMANENT RAM STORAGE  (MUST BE PRESERVED BETWEEN CALLS)
+   69                ;******* THESE PARAMETERS MUST BE SET BEFORE USING GRAPHIC ************
+   70                ;******************* ROUTINES THAT REFERENCE THEM *********************
+   71
+   72 00EE                    .=     X'100        ; PUT IN STACK AREA FOR CONVENIENCE
+   73
+   74 0100           VMORG:   .=.+   1            ; PAGE NUMBER OF FIRST VISIBLE MEMORY
+   75                                             ; LOCATION
+   76 0101           X1CORD:  .=.+   2            ; COORDINATE PAIR 1 AND CURSOR LOCATION
+   77 0103           Y1CORD:  .=.+   2
+   78 0105           X2CORD:  .=.+   2            ; COORDINATE PAIR 2
+   79 0107           Y2CORD:  .=.+   2
+   80 0109           TMAR:    .=.+   2            ; TOP MARGIN FOR DTEXT
+   81 010B           BMAR:    .=.+   2            ; BOTTOM MARGIN FOR DTEXT
+   82 010D           LMAR:    .=.+   2            ; LEFT MARGIN FOR DTEXT
+   83 010F           RMAR:    .=.+   2            ; RIGHT MARGIN FOR DTEXT
+   84
+   85                ;        GENERAL TEMPORARY STORAGE (CAN BE DESTROYED BETWEEN CALLS)
+   86
+   87 0111           BTPT:    .=.+   1            ; BIT NUMBER
+   88 0112           DELTAX:  .=.+   2            ; DELTA X FOR LINE DRAW
+   89 0114           DELTAY:  .=.+   2            ; DELTA Y FOR LINE DRAW
+   90 0116           ACC:     .=.+   2            ; ACCUMULATOR FOR LINE DRAW
+   91 0118           XDIR:    .=.+   1            ; X MOVEMENT DIRECTION, ZERO=+
+   92 0119           YDIR:    .=.+   1            ; Y MOVEMENT DIRECTION, ZERO=+
+   93 011A           XCHFLG:  .=.+   1            ; EXCHANGE X AND Y FLAG, EXCHANGE IF NOT 0
+   94 011B           COLOR:   .=.+   1            ; COLOR OF LINE DRAWN -1=WHITE
+   95 011C           TEMP:    .=.+   2            ; TEMPORARY STORAGE
+   96 0112           TLBYT    =      DELTAX       ; TOP LEFT BYTE ADDRESS FOR TEXT WINDOW
+   97 0118           TLBIT    =      XDIR         ; TOP LEFT BIT ADDRESS FOR TEXT WINDOW
+   98 0114           TRBYT    =      DELTAY       ; TOP RIGHT BYTE ADDRESS FOR TEXT WINDOW
+   99 0119           TRBIT    =      YDIR         ; TOP RIGHT BIT ADDRESS FOR TEXT WINDOW
+  100 0116           BRBYT    =      ACC          ; BOTTOM RIGHT BYTE ADDRESS FOR TXT WINDOW
+  101
+                              .PAGE  'CLEAR ENTIRE SCREEN ROUTINE'
+  102                ;        CLEAR ENTIRE SCREEN ROUTINE
+  103                ;        USES BOTH INDICES AND ADP1
+  104
+  105 011E                    .=     X'5500       ; PUT AT END OF 16K EXPANSION
+  106
+  107 5500 A000      CLEAR:   LDY    #0           ; INITIALIZE ADDRESS POINTER
+  108 5502 84EA               STY    ADP1         ; AND ZERO INDEX Y
+  109 5504 AD0001             LDA    VMORG
+  110 5507 85EB               STA    ADP1+1
+  111 5509 18                 CLC                 ; COMPUTE END ADDRESS
+  112 550A 691F               ADC    #NPIX/8/256
+  113 550C AA                 TAX                 ; KEEP IT IN X
+  114 550D 98        CLEAR1:  TYA                 ; CLEAR A BYTE
+  115 550E 91EA               STA    (ADP1),Y
+  116 5510 E6EA               INC    ADP1         ; INCREMENT ADDRESS POINTER
+  117 5512 D002               BNE    CLEAR2
+  118 5514 E6EB               INC    ADP1+1
+  119 5516 A5EA      CLEAR2:  LDA    ADP1         ; TEST IF DONE
+  120 5518 C940               CMP    #NPIX/8&X'FF
+  121 551A D0F1               BNE    CLEAR1       ; LOOP IF NOT
+  122 551C E4EB               CPX    ADP1+1
+  123 551E D0ED               BNE    CLEAR1       ; LOOP IF NOT
+  124 5520 60                 RTS                 ; RETURN
+  125
+                              .PAGE  'PIXADR - BYTE AND BIT ADDRESS OF A PIXEL'
+  126                ;        PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
+  127                ;                 X1CORD,Y1CORD
+  128                ;        PUTS BYTE ADDRESS IN ADP1 AND BIT MUMBER (BIT 0 IS LEFTMOST)
+  129                ;        IN BTPT.
+  130                ;        DOES NOT CHECK MAGNITUDE OF COORDINATES FOR MAXIMUM SPEED
+  131                ;        PRESERVES X AND Y REGISTERS, DESTROYS A
+  132                ;        BYTE ADDRESS = VMORG*256+(199-Y1CORD)*40+INT(XCORD/8)
+  133                ;        BIT ADDRESS = REM(XCORD/8)
+  134                ;        OPTIMIZED FOR SPEED THEREFORE CALLS TO A DOUBLE SHIFT ROUTINE
+  135                ;        ARE NOT DONE
+  136
+  137 5521 AD0101    PIXADR:  LDA    X1CORD       ; COMPUTE BIT ADDRESS FIRST
+  138 5524 85EA               STA    ADP1         ; ALSO TRANSFER X1CORD TO ADP1
+  139 5526 2907               AND    #X'07        ; WHICH IS SIMPLY THE LOW 3 BITS OF X
+  140 5528 8D1101             STA    BTPT
+  141 552B AD0201             LDA    X1CORD+1     ; FINISH TRANSFERRING X1CORD TO ADP1
+  142 552E 85EB               STA    ADP1+1
+  143 5530 46EB               LSR    ADP1+1       ; DOUBLE SHIFT ADP1 RIGHT 3 TO GET
+  144 5532 66EA               ROR    ADP1         ; INT(XCORD/8)
+  145 5534 46EB               LSR    ADP1+1
+  146 5536 66EA               ROR    ADP1
+  147 5538 46EB               LSR    ADP1+1
+  148 553A 66EA               ROR    ADP1
+  149 553C A9C7               LDA    #199         ; TRANSFER (199-Y1CORD) TO ADP2
+  150 553E 38                 SEC                 ; AND TEMPORARY STORAGE
+  151 553F ED0301             SBC    Y1CORD
+  152 5542 85EC               STA    ADP2
+  153 5544 8D1C01             STA    TEMP
+  154 5547 A900               LDA    #0
+  155 5549 ED0401             SBC    Y1CORD+1
+  156 554C 85ED               STA    ADP2+1
+  157 554E 8D1D01             STA    TEMP+1
+  158 5551 06EC               ASL    ADP2         ; COMPUTE 40*(199-Y1CORD)
+  159 5553 26ED               ROL    ADP2+1       ;  2*(199-Y1CORD)
+  160 5555 06EC               ASL    ADP2
+  161 5557 26ED               ROL    ADP2+1       ;  4*(199+Y1CORD)
+  162 5559 A5EC               LDA    ADP2         ;  ADD IN TEMPORARY SAVE OF (199-Y1CORD)
+  163 555B 18                 CLC                 ;  TO MAKE 5*(199-Y1CORD)
+  164 555C 6D1C01             ADC    TEMP
+  165 555F 85EC               STA    ADP2
+  166 5561 A5ED               LDA    ADP2+1
+  167 5563 6D1D01             ADC    TEMP+1
+  168 5566 85ED               STA    ADP2+1       ;  5*(199-Y1CORD)
+  169 5568 06EC               ASL    ADP2         ;  10*(199-Y1CORD)
+  170 556A 26ED               ROL    ADP2+1
+  171 556C 06EC               ASL    ADP2         ;  20*(199-Y1CORD)
+  172 556E 26ED               ROL    ADP2+1
+  173 5570 06EC               ASL    ADP2         ;  40*(199-Y1CORD)
+  174 5572 26ED               ROL    ADP2+1
+  175 5574 A5EC               LDA    ADP2         ; ADD IN INT(X1CORD/8) COMPUTED EARLIER
+  176 5576 18                 CLC
+  177 5577 65EA               ADC    ADP1
+  178 5579 85EA               STA    ADP1
+  179 557B A5ED               LDA    ADP2+1
+VMSUP  K-1008 VM GRAPHIC SUP
+PIXADR - BYTE AND BIT ADDRESS OF A PIXEL
+
+  180 557D 65EB               ADC    ADP1+1
+  181 557F 6D0001             ADC    VMORG        ; ADD IN VMORG*256
+  182 5582 85EB               STA    ADP1+1       ; FINAL RESULT
+  183 5584 60                 RTS                 ; RETURN
+  184
+                              .PAGE  'INDIVIDUAL PIXEL SUBROUTINES'
+  185                ;        STPIX - SETS THE PIXEL AT X1CORD,Y1CORD TO A ONE (WHITE DOT)
+  186                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  187                ;        PRESERVES X AND Y
+  188                ;        ASSUMES IN RANGE CORRDINATES
+  189
+  190 5585 202155    STPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+  191                                             ; INTO ADP1
+  192 5588 98                 TYA                 ; SAVE Y
+  193 5589 48                 PHA
+  194 558A AC1101             LDY    BTPT         ; GET BIT NUMBER IN Y
+  195 558D B9EC55             LDA    MSKTB1,Y     ; GET A BYTE WITH THAT BIT =1, OTHERS =0
+  196 5590 A000               LDY    #0           ; ZERO Y
+  197 5592 11EA               ORA    (ADP1),Y     ; COMBINE THE BIT WITH THE ADDRESSED VM
+  198 5594 91EA               STA    (ADP1),Y     ; BYTE
+  199 5596 68                 PLA                 ; RESTORE Y
+  200 5597 A8                 TAY
+  201 5598 60                 RTS                 ; AND RETURN
+  202
+  203                ;        CLPIX - CLEARS THE PIXEL AT X1CORD,Y1CORD TO A ZERO (BLACK DOT
+  204                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  205                ;        PRESERVES X AND Y
+  206                ;        ASSUMES IN RANGE COORDINATES
+  207
+  208 5599 202155    CLPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+  209                                             ; INTO ADP1
+  210 559C 98                 TYA                 ; SAVE Y
+  211 559D 48                 PHA
+  212 559E AC1101             LDY    BTPT         ; GET BIT NUMBER IN Y
+  213 55A1 B9F455             LDA    MSKTB2,Y     ; GET A BYTE WITH THAT BIT =0, OTHERS =1
+  214 55A4 A000               LDY    #0           ; ZERO Y
+  215 55A6 31EA               AND    (ADP1),Y     ; REMOVE THE BIT FROM THE ADDRESSED VM
+  216 55A8 91EA      CLPIX1:  STA    (ADP1),Y     ; BYTE
+  217 55AA 68                 PLA                 ; RESTORE Y
+  218 55AB A8                 TAY
+  219 55AC 60                 RTS                 ; AND RETURN
+  220
+  221                ;        FLPIX - FLIPS THE PIXEL AT X1CORD,Y1CORD
+  222                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  223                ;        PRESERVES X AND Y
+  224                ;        ASSUMES IN RANGE COORDINATES
+  225
+  226 55AD 202155    FLPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
+  227                                             ; INTO ADP1
+  228 55B0 98                 TYA                 ; SAVE Y
+  229 55B1 48                 PHA
+  230 55B2 AC1101             LDY    BTPT         ; GET BIT NUMBER IN Y
+  231 55B5 B9EC55             LDA    MSKTB1,Y     ; GET A BYTE WITH THAT BIT =1, OTHERS =0
+  232 55B8 A000               LDY    #0           ; ZERO Y
+  233 55BA 51EA               EOR    (ADP1),Y     ; FLIP THAT BIT IN THE ADDRESSED VM BYTE
+  234 55BC 91EA               STA    (ADP1),Y
+  235 55BE 68                 PLA                 ; RESTORE Y
+  236 55BF A8                 TAY
+  237 55C0 60                 RTS                 ; AND RETURN
+  238
+VMSUP  K-1008 VM GRAPHIC SUP
+INDIVIDUAL PIXEL SUBROUTINES
+
+  239                ;        WRPIX - SETS THE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE STATE
+  240                ;        OF BIT 0 (RIGHTMOST) OF A
+  241                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  242                ;        PRESERVES X AND Y AND A
+  243                ;        ASSUMES IN RANGE CORRDINATES
+  244
+  245 55C1 2CD155    WRPIX:   BIT    WRPIXM       ; TEST LOW BIT OF A
+  246 55C4 48                 PHA
+  247 55C5 F005               BEQ    WRPIX1       ; JUMP IF A ZERO TO BE WRITTEN
+  248 55C7 208555             JSR    STPIX        ; OTHERWISE WRITE A ONE
+  249 55CA 68                 PLA                 ; RESTORE A AND RETURN
+  250 55CB 60                 RTS
+  251 55CC 209955    WRPIX1:  JSR    CLPIX        ; CLEAR THE PIXEL
+  252 55CF 68                 PLA                 ; RESTORE A AND RETURN
+  253 55D0 60                 RTS
+  254
+  255 55D1 01        WRPIXM:  .BYTE  1            ; BIT TEST MASK FOR BIT 0
+  256
+  257                ;        RDPIX - READS THE PIXEL AT X1CORD,Y1CORD AND SETS A TO ALL
+  258                ;        ZEROES IF IT IS A ZERO OR TO ALL ONES IF IT IS A ONE
+  259                ;        LOW BYTE OF ADP1 IS EQUAL TO A ON RETURN
+  260                ;        DOES NOT ALTER X1CORD OR Y1CORD
+  261                ;        PRESERVES X AND Y
+  262                ;        ASSUMES IN RANGE CORRDINATES
+  263
+  264 55D2 202155    RDPIX:   JSR    PIXADR       ; GET BYTE AND BIT ADDRESS OF PIXEL
+  265 55D5 98                 TYA                 ; SAVE Y
+  266 55D6 48                 PHA
+  267 55D7 A000               LDY    #0           ; GET ADDRESSED BYTE FROM VM
+  268 55D9 B1EA               LDA    (ADP1),Y
+  269 55DB AC1101             LDY    BTPT         ; GET BIT NUMBER IN Y
+  270 55DE 39EC55             AND    MSKTB1,Y     ; CLEAR ALL BUT ADDRESSED BIT
+  271 55E1 F002               BEQ    RDPIX1       ; SKIP AHEAD IF IT WAS A ZERO
+  272 55E3 A9FF               LDA    #X'FF        ; SET TO ALL ONES IF IT WAS A ONE
+  273 55E5 85EA      RDPIX1:  STA    ADP1         ; SAVE A TEMPORARILY IN ADP1 WHILE
+  274 55E7 68                 PLA                 ; RESTORING Y
+  275 55E8 A8                 TAY
+  276 55E9 A5EA               LDA    ADP1
+  277 55EB 60                 RTS                 ; RETURN
+  278
+  279                ;        MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
+  280                ;        MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
+  281                ;        MSKTB2 IS A TABLE OF 0 BITS CORRESPONDING TO BIT NUMBERS
+  282
+  283 55EC 80402010  MSKTB1:  .BYTE  X'80,X'40,X'20,X'10
+  284 55F0 08040201           .BYTE  X'08,X'04,X'02,X'01
+  285 55F4 7FBFDFEF  MSKTB2:  .BYTE  X'7F,X'BF,X'DF,X'EF
+  286 55F8 F7FBFDFE           .BYTE  X'F7,X'FB,X'FD,X'FE
+  287
+                              .PAGE  'COORDINATE CHECK ROUTINES'
+  288                ;        CKCRD1 - CKECK X1CORD,Y1CORD TO VERIFY THAT THEY ARE IN THE
+  289                ;                 PROPER RANGE.  IF NOT, THEY ARE REPLACED BY A VALUE
+  290                ;                 MODULO THE MAXIMUM VALUE+1.
+  291                ;        NOTE THAT THESE ROUTINES CAN BE VERY SLOW WHEN CORRECTIONS ARE
+  292                ;        NECESSARY BECAUSE A BRUTE FORCE DIVISON ROUTINE IS USED TO
+  293                ;        COMPUTE THE MODULUS.
+  294                ;        FOR MAXIMUM FLEXIBILITY IN USE, ALL REGISTERS ARE PRESERVED
+  295
+  296 55FC 48        CKCRD1:  PHA                 ; SAVE ALL REGISTERS
+  297 55FD 8A                 TXA
+  298 55FE 48                 PHA
+  299 55FF 98                 TYA
+  300 5600 48                 PHA
+  301 5601 A200               LDX    #X1CORD-X1CORD ; CHECK X1CORD
+  302 5603 A000               LDY    #XLIMIT-LIMTAB
+  303 5605 202B56             JSR    CK
+  304 5608 A202               LDX    #Y1CORD-X1CORD ; CHECK Y1CORD
+  305 560A A002               LDY    #YLIMIT-LIMTAB
+  306 560C 202B56             JSR    CK
+  307 560F 68        CKCRDR:  PLA                 ; RESTORE REGISTERS
+  308 5610 A8                 TAY
+  309 5611 68                 PLA
+  310 5612 AA                 TAX
+  311 5613 68                 PLA
+  312 5614 60                 RTS                 ; AND RETURN
+  313
+  314                ;        CKCRD2 - SAME AS CKCRD1 EXCEPT CHECKS X2CORD,Y2CORD
+  315
+  316 5615 48        CKCRD2:  PHA                 ; SAVE ALL REGISTERS
+  317 5616 8A                 TXA
+  318 5617 48                 PHA
+  319 5618 98                 TYA
+  320 5619 48                 PHA
+  321 561A A204               LDX    #X2CORD-X1CORD ; CHECK X2CORD
+  322 561C A000               LDY    #XLIMIT-LIMTAB
+  323 561E 202B56             JSR    CK
+  324 5621 A206               LDX    #Y2CORD-X1CORD ; CHECK Y2CORD
+  325 5623 A002               LDY    #YLIMIT-LIMTAB
+  326 5625 202B56             JSR    CK
+  327 5628 4C0F56             JMP    CKCRDR       ; GO RESTORE REGISTERS AND RETURN
+  328
+  329 562B BD0201    CK:      LDA    X1CORD+1,X   ; CHECK UPPER BYTE
+  330 562E D95556             CMP    LIMTAB+1,Y   ; AGAINST UPPER BYTE OF LIMIT
+  331 5631 9020               BCC    CK4          ; OK IF LESS THAN UPPER BYTE OF LIMIT
+  332 5633 F016               BEQ    CK3          ; GO CHECK LOWER BYTE IF EQUAL TO
+  333                                             ; UPPER BYTE OF LIMIT
+  334 5635 BD0101    CK2:     LDA    X1CORD,X     ; SUBTRACT THE LIMIT
+  335 5638 38                 SEC                 ; LOWER BYTE FIRST
+  336 5639 F95456             SBC    LIMTAB,Y
+  337 563C 9D0101             STA    X1CORD,X
+  338 563F BD0201             LDA    X1CORD+1,X
+  339 5642 F95556             SBC    LIMTAB+1,Y
+  340 5645 9D0201             STA    X1CORD+1,X
+  341 5648 4C2B56             JMP    CK           ; AND THEN GO CHECK RANGE AGAIN
+VMSUP  K-1008 VM GRAPHIC SUP
+COORDINATE CHECK ROUTINES
+
+  342 564B BD0101    CK3:     LDA    X1CORD,X     ; CHECK LOWER BYTE OF X
+  343 564E D95456             CMP    LIMTAB,Y
+  344 5651 B0E2               BCS    CK2          ; GO ADJUST IF TOO LARGE
+  345 5653 60        CK4:     RTS                 ; RETURN
+  346
+  347                LIMTAB:                      ; TABLE OF LIMITS
+  348 5654 4001      XLIMIT:  .WORD  NX
+  349 5656 C800      YLIMIT:  .WORD  NY
+  350
+                              .PAGE  'LINE DRAWING ROUTINES'
+  351                ;        DRAW - DRAW THE BEST STRAIGHT LINE FROM X1CORD,Y1CORD TO
+  352                ;        X2CORD, Y2CORD.
+  353                ;        X2CORD,Y2CORD COPIED TO X1CORD,Y1CORD AFTER DRAWING
+  354                ;        PRESERVES X AND Y
+  355                ;        USES AN ALGORITHM THAT REQUIRES NO MULTIPLICATION OR DIVISON
+  356
+  357 5658 A900      ERASE:   LDA    #X'00        ; SET LINE COLOR TO BLACK
+  358 565A F002               BEQ    DRAW1        ; GO DRAW THE LINE
+  359
+  360 565C A9FF      DRAW:    LDA    #X'FF        ; SET LINE COLOR TO WHITE
+  361 565E 8D1B01    DRAW1:   STA    COLOR
+  362 5661 8A                 TXA                 ; SAVE X AND Y
+  363 5662 48                 PHA
+  364 5663 98                 TYA
+  365 5664 48                 PHA
+  366
+  367                ;        COMPUTE SIGN AND MAGNITUDE OF DELTA X = X2-X1
+  368                ;        PUT MAGNITUDE IN DELTAX AND SIGN IN XDIR
+  369
+  370 5665 A900               LDA    #0           ; FIRST ZERO DIR
+  371 5667 8D1801             STA    XDIR
+  372 566A AD0501             LDA    X2CORD       ; NEXT COMPUTE TWOS COMPLEMENT DIFFERENCE
+  373 566D 38                 SEC
+  374 566E ED0101             SBC    X1CORD
+  375 5671 8D1201             STA    DELTAX
+  376 5674 AD0601             LDA    X2CORD+1
+  377 5677 ED0201             SBC    X1CORD+1
+  378 567A 8D1301             STA    DELTAX+1
+  379 567D 1014               BPL    DRAW2        ; SKIP AHEAD IF DIFFERENCE IS POPSITIVE
+  380 567F CE1801             DEC    XDIR         ; SET XDIR TO -1
+  381 5682 38                 SEC                 ; NEGATE DELTAX
+  382 5683 A900               LDA    #0
+  383 5685 ED1201             SBC    DELTAX
+  384 5688 8D1201             STA    DELTAX
+  385 568B A900               LDA    #0
+  386 568D ED1301             SBC    DELTAX+1
+  387 5690 8D1301             STA    DELTAX+1
+  388
+  389                ;        COMPUTE SIGN AND MAGNITUDE OF DELTA Y = Y2-Y1
+  390                ;        PUT MAGNITUDE IN DELTAY AND SIGN IN YDIR
+  391
+  392 5693 A900      DRAW2:   LDA    #0           ; FIRST ZERO YDIR
+  393 5695 8D1901             STA    YDIR
+  394 5698 AD0701             LDA    Y2CORD       ; NEXT COMPUTE TWOS COMPLEMENT DIFFERENCE
+  395 569B 38                 SEC
+  396 569C ED0301             SBC    Y1CORD
+  397 569F 8D1401             STA    DELTAY
+  398 56A2 AD0801             LDA    Y2CORD+1
+  399 56A5 ED0401             SBC    Y1CORD+1
+  400 56A8 8D1501             STA    DELTAY+1
+  401 56AB 1014               BPL    DRAW3        ; SKI AHEAD IF DIFFERENCE IS POSITIVE
+  402 56AD CE1901             DEC    YDIR         ; SET YDIR TO -1
+  403 56B0 38                 SEC                 ; NEGATE DELTAX
+  404 56B1 A900               LDA    #0
+VMSUP  K-1008 VM GRAPHIC SUP
+LINE DRAWING ROUTINES
+
+  405 56B3 ED1401             SBC    DELTAY
+  406 56B6 8D1401             STA    DELTAY
+  407 56B9 A900               LDA    #0
+  408 56BB ED1501             SBC    DELTAY+1
+  409 56BE 8D1501             STA    DELTAY+1
+  410
+  411                ;        DETERMINE IF DELTAY IS LARGER THAN DELTAX
+  412                ;        IF SO, EXCHANGE DELTAY AND DELTAX AND SET XCHFLG NONZERO
+  413                ;        ALSO INITIALIZE ACC TO DELTAX
+  414                ;        PUT A DOT AT THE INITIAL DENPOINT
+  415
+  416 56C1 A900      DRAW3:   LDA    #0           ; FIRST ZERO XCHFLG
+  417 56C3 8D1A01             STA    XCHFLG
+  418 56C6 AD1401             LDA    DELTAY       ; COMPARE DELTAY WITH DELTAX
+  419 56C9 38                 SEC
+  420 56CA ED1201             SBC    DELTAX
+  421 56CD AD1501             LDA    DELTAY+1
+  422 56D0 ED1301             SBC    DELTAX+1
+  423 56D3 901B               BCC    DRAW4        ; SKIP EXCHANGE IF DELTAX IS GREATER THAN
+  424                                             ; DELTAY
+  425 56D5 AE1401             LDX    DELTAY       ; EXCHANGE DELTAX AND DELTAY
+  426 56D8 AD1201             LDA    DELTAX
+  427 56DB 8D1401             STA    DELTAY
+  428 56DE 8E1201             STX    DELTAX
+  429 56E1 AE1501             LDX    DELTAY+1
+  430 56E4 AD1301             LDA    DELTAX+1
+  431 56E7 8D1501             STA    DELTAY+1
+  432 56EA 8E1301             STX    DELTAX+1
+  433 56ED CE1A01             DEC    XCHFLG       ; SET XCHFLG TO -1
+  434 56F0 AD1201    DRAW4:   LDA    DELTAX       ; INITIALIZE ACC TO DELTAX
+  435 56F3 8D1601             STA    ACC
+  436 56F6 AD1301             LDA    DELTAX+1
+  437 56F9 8D1701             STA    ACC+1
+  438 56FC AD1B01             LDA    COLOR        ; PUT A DOT AT THE INITIAL ENDPOINT
+  439 56FF 20C155             JSR    WRPIX        ; X1CORD,Y1CORD
+  440
+  441                ;        HEAD OF MAIN DRAWING LOOP
+  442                ;        TEST IF DONE
+  443
+  444 5702 AD1A01    DRAW45:  LDA    XCHFLG       ; TEST IF X AND Y EXCHANGED
+  445 5705 D012               BNE    DRAW5        ; JUMP AHEAD IF SO
+  446 5707 AD0101             LDA    X1CORD       ; TEST FOR X1CORD=X2CORD
+  447 570A CD0501             CMP    X2CORD
+  448 570D D01F               BNE    DRAW7        ; GO FOR ANOTHER ITERATION IF NOT
+  449 570F AD0201             LDA    X1CORD+1
+  450 5712 CD0601             CMP    X2CORD+1
+  451 5715 D017               BNE    DRAW7        ; GO FOR ANOTHER ITERATION IF NOT
+  452 5717 F010               BEQ    DRAW6        ; GO RETURN IF SO
+  453 5719 AD0301    DRAW5:   LDA    Y1CORD       ; TEST FOR Y1CORD=Y2CORD
+  454 571C CD0701             CMP    Y2CORD
+  455 571F D00D               BNE    DRAW7        ; GO FOR ANOTHER ITERATION IF NOT
+  456 5721 AD0401             LDA    Y1CORD+1
+  457 5724 CD0801             CMP    Y2CORD+1
+  458 5727 D005               BNE    DRAW7        ; GO FOR ANOTHER ITERATION IF NOT
+  459 5729 68        DRAW6:   PLA                 ; RESTORE INDEX REGISTERS
+VMSUP  K-1008 VM GRAPHIC SUP
+LINE DRAWING ROUTINES
+
+  460 572A A8                 TAY
+  461 572B 68                 PLA
+  462 572C AA                 TAX
+  463 572D 60                 RTS                 ; AND RETURN
+  464
+  465                ;        DO A CLACULATION TO DETERMINE IF ONE OR BOTH AXES ARE TO BE
+  466                ;        BUMPED (INCREMENTED OR DECREMENTED ACCORDING TO XDIR AND YDIR)
+  467                ;        AND DO THE BUMPING
+  468
+  469 572E AD1A01    DRAW7:   LDA    XCHFLG       ; TEST IF X AND Y EXCHANGED
+  470 5731 D006               BNE    DRAW8        ; JUMP IF SO
+  471 5733 208957             JSR    BMPX         ; BUMP X IF NOT
+  472 5736 4C3C57             JMP    DRAW9
+  473 5739 20A357    DRAW8:   JSR    BMPY         ; BUMP Y IF SO
+  474 573C 206157    DRAW9:   JSR    SBDY         ; SUBTRACT DY FROM ACC TWICE
+  475 573F 206157             JSR    SBDY
+  476 5742 1014               BPL    DRAW12       ; SKIP AHEAD IF ACC IS NOT NEGATIVE
+  477 5744 AD1A01             LDA    XCHFLG       ; EST IF X AND Y EXCHANGED
+  478 5747 D006               BNE    DRAW10       ; JUMP IF SO
+  479 5749 20A357             JSR    BMPY         ; BUMP Y IF NOT
+  480 574C 4C5257             JMP    DRAW11
+  481 574F 208957    DRAW10:  JSR    BMPX         ; BUMP X IF SO
+  482 5752 207557    DRAW11:  JSR    ADDX         ; ADD DX TO ACC TWICE
+  483 5755 207557             JSR    ADDX
+  484
+  485 5758 AD1B01    DRAW12:  LDA    COLOR        ; OUTPUT THE NEW POINT
+  486 575B 20C155             JSR    WRPIX
+  487 575E 4C0257             JMP    DRAW45       ; GO TEST IF DONE
+  488
+  489                ;        SUBROUTINES FOR DRAW
+  490
+  491 5761 AD1601    SBDY:    LDA    ACC          ; SUBTRACT DELAY FROM ACC AND PUT RESULT
+  492 5764 38                 SEC                 ; IN ACC
+  493 5765 ED1401             SBC    DELTAY
+  494 5768 8D1601             STA    ACC
+  495 576B AD1701             LDA    ACC+1
+  496 576E ED1501             SBC    DELTAY+1
+  497 5771 8D1701             STA    ACC+1
+  498 5774 60                 RTS
+  499
+  500
+  501 5775 AD1601    ADDX:    LDA    ACC          ; ADD DELTAX TO ACC AND PUT RESULT IN ACC
+  502 5778 18                 CLC
+  503 5779 6D1201             ADC    DELTAX
+  504 577C 8D1601             STA    ACC
+  505 577F AD1701             LDA    ACC+1
+  506 5782 6D1301             ADC    DELTAX+1
+  507 5785 8D1701             STA    ACC+1
+  508 5788 60                 RTS
+  509
+  510
+  511 5789 AD1801    BMPX:    LDA    XDIR         ; BUMP X1CORD BY +1 OR -1 ACCORDING
+  512 578C D009               BNE    BMPX2        ; XDIR
+  513 578E EE0101             INC    X1CORD       ; DOUBLE INCREMENT X1CORD IF XDIR=0
+  514 5791 D003               BNE    BMPX1
+VMSUP  K-1008 VM GRAPHIC SUP
+LINE DRAWING ROUTINES
+
+  515 5793 EE0201             INC    X1CORD+1
+  516 5796 60        BMPX1:   RTS
+  517 5797 AD0101    BMPX2:   LDA    X1CORD       ; DOUBLE DECREMENT X1CORD IF XDIR<>0
+  518 579A D003               BNE    BMPX3
+  519 579C CE0201             DEC    X1CORD+1
+  520 579F CE0101    BMPX3:   DEC    X1CORD
+  521 57A2 60                 RTS
+  522
+  523
+  524 57A3 AC1901    BMPY:    LDY    YDIR         ; BUMP Y1CORD BY +1 OR -1 ACCORDING TO
+  525 57A6 D009               BNE    BMPY2        ; YDIR
+  526 57A8 EE0301             INC    Y1CORD       ; DOUBLE INCREMENT Y1CORD IF YDIR=0
+  527 57AB D003               BNE    BMPY1
+  528 57AD EE0401             INC    Y1CORD+1
+  529 57B0 60        BMPY1:   RTS
+  530 57B1 AD0301    BMPY2:   LDA    Y1CORD       ; DOUBLE DECREMENT Y1CORD IF YDIR<>0
+  531 57B4 D003               BNE    BMPY3
+  532 57B6 CE0401             DEC    Y1CORD+1
+  533 57B9 CE0301    BMPY3:   DEC    Y1CORD
+  534 57BC 60                 RTS
+  535
+                              .PAGE  'DCHAR - DRAW A CHARACTER'
+  536                ;        DCHAR - DRAW A CHARACTER WHOSE UPPER LEFT CORNER IS AT
+  537                ;        X1CORD,Y1CORD
+  538                ;        X1CORD AND Y1CORD ARE NOT ALTERED
+  539                ;        THIS ROUTINE DISPLAYS A 5 BY 9 DOT MATRIX CHARACTER AT THE
+  540                ;        SPECIFIED LOCATION.  THE 5 BY 9 BLOCK IS CLEARED AND THEN THE
+  541                ;        CHARACTER IS WRITTEN INTO IT.
+  542                ;        THE 5 BY 9 MATRIX INCLUDES 2 LINE DESCENDERS ON LOWER CASE
+  543                ;        CHARACTERS.
+  544                ;        BOTH INDEX REGISTERS AND THE ACCUMULATOR ARE PRESERVED.
+  545                ;        THE CHARACTER CODE TO BE DISPLAYED SHOULD BE IN A.
+  546                ;        ASCII CONTROL CODES ARE IGNORED AND NO DRAWING IS DONE
+  547                ;        THIS ROUTINE ASSUMES IN RANGE COORDINATES INCLUDING WIDTH AND
+  548                ;        HEIGHT OF CHARACTER.
+  549
+  550 57BD 48        DCHAR:   PHA                 ; SAVE REGISTERS
+  551 57BE 8A                 TXA
+  552 57BF 48                 PHA
+  553 57C0 98                 TYA
+  554 57C1 48                 PHA
+  555 57C2 BA                 TSX                 ; GET IMPUT CHARACTER BACK
+  556 57C3 BD0301             LDA    X'103,X
+  557 57C6 297F               AND    #X'7F        ; INSURE 7 BIT ASCII INPUT
+  558 57C8 38                 SEC
+  559 57C9 E920               SBC    #X'20        ; TEST IF A CONTROL CHARACTER
+  560 57CB 3062               BMI    DCHAR5       ; DO A QUICK RETURN IF SO
+  561
+  562                ;        CALCULATE FONT TABLE ADDRESS FOR CHAR
+  563
+  564 57CD 48                 PHA                 ; SAVE VERIFIED, ZERO ORIGIN CHAR CODE
+  565 57CE 202155             JSR    PIXADR       ; GET BYTE AND BIT ADDRESS OF FIRST SCAN
+  566                                             ; LINE OF CHARACTER INTO ADP1 AND BTPT
+  567 57D1 68                 PLA                 ; RESTORE ZERO ORIGIN CHARACTER CODE
+  568 57D2 85EC               STA    ADP2         ; PUT IT INTO ADP2
+  569 57D4 A900               LDA    #0
+  570 57D6 85ED               STA    ADP2+1
+  571 57D8 20DC5A             JSR    SADP2L       ; COMPUTE 8*CHARACTER CODE IN ADP2
+  572 57DB 20DC5A             JSR    SADP2L
+  573 57DE 20DC5A             JSR    SADP2L
+  574 57E1 A5EC               LDA    ADP2         ; ADD IN ORIGIN FOR CHARACTER TABLE
+  575 57E3 18                 CLC
+  576 57E4 6976               ADC    #CHTB&X'FF
+  577 57E6 85EC               STA    ADP2
+  578 57E8 A5ED               LDA    ADP2+1
+  579 57EA 695C               ADC    #CHTB/256
+  580 57EC 85ED               STA    ADP2+1       ; ADP2 NOW HAS ADDRESS OF TOP ROW OF
+  581                                             ; CHARACTER SHAPE
+  582
+  583
+  584 57EE A000               LDY    #0           ; INITIALIZE Y INDEX = FONT TABLE POINTER
+  585 57F0 A200               LDX    #0           ; INITIALIZE X = SCAN LINE COUNTER
+  586
+  587                ;        CLEAR THE FIRST TWO SCAN LINES OF DESCENDING CHARACTERS
+  588                ;        FOR LOWER CASE "J", PUT IN THE DOT AS A SPECIAL CASE
+  589
+VMSUP  K-1008 VM GRAPHIC SUP
+DCHAR - DRAW A CHARACTER
+
+  590 57F2 B1EC               LDA    (ADP2),Y     ; GET THE FIRST ROW FROM THE TABLE
+  591 57F4 F01C               BEQ    DCHAR3       ; SKIP AHEAD IF NOT A DESCENDING CHARACTER
+  592 57F6 A5EC               LDA    ADP2         ; IF DESCENDING, TEST IF LOWER CASE J
+  593 57F8 C9C6               CMP    #X'6A-X'20*8+CHTB&X'FF
+  594 57FA D004               BNE    DCHAR1       ; CLEAR FIRST SCAN LINE IF NOT
+  595 57FC A920               LDA    #X'20        ; LOAD THE DOT FOR THE J IF A J
+  596 57FE D002               BNE    DCHAR2
+  597 5800 A900      DCHAR1:  LDA    #0           ; DO THE FIRST SCAN LINE
+  598 5802 208558    DCHAR2:  JSR    MERGE5
+  599 5805 20E15A             JSR    DN1SCN       ; GO DOWN 1 SCAN LINE
+  600 5808 E8                 INX                 ; COUNT SCAN LINES DONE
+  601 5809 A900               LDA    #0           ; CLEAR THE SECOND SCAN LINE
+  602 580B 208558             JSR    MERGE5
+  603 580E 20E15A             JSR    DN1SCN       ; GO DOWN ANOTHER SCAN LINE
+  604 5811 E8                 INX                 ; COUNT SCAN LINES DONE
+  605
+  606                ;        SCAN QUT THE BODY OF THE CHARACTER
+  607
+  608 5812 C8        DCHAR3:  INY                 ; GO TO NEXT SCAN LINE OF THE FRONT
+  609 5813 B1EC               LDA    (ADP2),Y     ; GET THE SCAN LINE
+  610 5815 208558             JSR    MERGE5       ; MERGE IT WITH GRAPHIC MEMORY AT (ADP1)
+  611 5818 20E15A             JSR    DN1SCN       ; GO DOWN 1 SCAN LINE
+  612 581B E8                 INX                 ; COUNT SCAN LINES OUTPUTTED
+  613 581C C007               CPY    #7           ; TEST IF WHOLE CHARACTER SCANNED OUT
+  614 581E D0F2               BNE    DCHAR3       ; GO SCAN OUT ANOTHER ROW IF NOT
+  615 5820 E009      DCHAR4:  CPX    #9           ; TEST IF THE WHOLE CHARACTER CELL SCANNED
+  616 5822 F00B               BEQ    DCHAR5       ; JUMP OUT IF SO
+  617 5824 A900               LDA    #0           ; CLEAR TRAILING SCAN LINES ON
+  618 5826 208558             JSR    MERGE5       ; NON-DESDENDING CHARACTERS
+  619 5829 20E15A             JSR    DN1SCN       ; TO NEXT LINE
+  620 582C E8                 INX                 ; COUNT LINES
+  621 582D D0F1               BNE    DCHAR4       ; LOOP UNTIL DONE
+  622
+  623                ;        RESTORE REGISTERS AND RETURN
+  624
+  625 582F 68        DCHAR5:  PLA
+  626 5830 A8                 TAY
+  627 5831 68                 PLA
+  628 5832 AA                 TAX
+  629 5833 68                 PLA
+  630 5834 60                 RTS
+  631
+                              .PAGE  'GRAPHIC MERGE ROUTINES'
+  632                ;        MERGEL - MERGE LEFT ROUTINE
+  633                ;        MERGES ACCUMULATOR CONTENTS WITH A BYTE OF GRAPHIC MEMORY
+  634                ;        ADDRESSED BY ADP1 AND BTPT.
+  635                ;        BITS TO THE LEFT OF (BTPT) ARE PRESERVED IN GRAPHIC MEMORY.
+  636                ;        BIT (BTPT) AND BITS TO THE RIGHT ARE SET EQUAL TO
+  637                ;        CORRESPONDING BIT POSITIONS IN THE ACCUMULATOR.
+  638                ;        NO REGISTERS ARE BOTHERED.
+  639
+  640 5835 48        MERGEL:  PHA                 ; SAVE REGISTERS
+  641 5836 8A                 TXA
+  642 5837 48                 PHA
+  643 5838 98                 TYA
+  644 5839 48                 PHA
+  645 583A BA                 TSX                 ; GET INPUT BACKK
+  646 583B BD0301             LDA    X'103,X
+  647 583E AC1101             LDY    BTPT         ; GET BIT NUMBER INTO Y
+  648 5841 39D058             AND    MERGTR-1,Y   ; CLEAR BITS TO BE PRESERVED IN MEMORY
+  649 5844 9D0301             STA    X'103,X      ; FROM A
+  650 5847 A000               LDY    #0           ; CLEAR BITS FROM MEMORY TO BE CHANGED
+  651 5849 AE1101             LDX    BTPT
+  652 584C B1EA               LDA    (ADP1),Y     ; GET MEMORY BYTE
+  653 584E 3DC858             AND    MERGTL,X     ; CLEAR THE BITS
+  654 5851 BA                 TSX                 ; DO THE MERGING
+  655 5852 1D0301             ORA    X'103,X
+  656 5855 91EA               STA    (ADP1),Y
+  657 5857 68                 PLA                 ; RESTORE REGISTERS
+  658 5858 A8                 TAY
+  659 5859 68                 PLA
+  660 585A AA                 TAX
+  661 585B 68                 PLA
+  662 585C 60                 RTS                 ; RETURN
+  663
+  664                ;        MERGR - MERGE RIGHT ROUTINE
+  665                ;        MERGES ACCUMULATOR CONTENTS WITH A BYTE OF GRAPHIC MEMORY
+  666                ;        ADDRESSED BY ADP1 AND BTPT.
+  667                ;        BITS TO THE RIGHT OF (BTPT) ARE PRESERVED IN GRAPHIC MEMORY.
+  668                ;        BIT (BTPT) AND BITS TO THE LEFT ARE SET EQUAL TO CORRESPONDING
+  669                ;        BIT POSITIONS IN THE ACCUMULATOR.
+  670                ;        NO REGISTERS ARE BOTHERED.
+  671
+  672 585D 48        MERGER:  PHA                 ; SAVE REGISTERS
+  673 585E 8A                 TXA
+  674 585F 48                 PHA
+  675 5860 98                 TYA
+  676 5861 48                 PHA
+  677 5862 BA                 TSX                 ; GET INPUT BACKK
+  678 5863 BD0301             LDA    X'103,X
+  679 5866 AC1101             LDY    BTPT         ; GET BIT NUMBER INTO Y
+  680 5869 39C758             AND    MERGTL-1,Y   ; CLEAR BITS TO BE PRESERVED IN MEMORY
+  681 586C 9D0301             STA    X'103,X      ; FROM A
+  682 586F A000               LDY    #0           ; CLEAR BITS FROM MEMORY TO BE CHANGED
+  683 5871 AE1101             LDX    BTPT
+  684 5874 B1EA               LDA    (ADP1),Y     ; GET MEMORY BYTE
+  685 5876 3DD158             AND    MERGTR,X     ; CLEAR THE BITS
+VMSUP  K-1008 VM GRAPHIC SUP
+GRAPHIC MERGE ROUTINES
+
+  686 5879 BA                 TSX                 ; DO THE MERGING
+  687 587A 1D0301             ORA    X'103,X
+  688 587D 91EA               STA    (ADP1),Y
+  689 587F 68                 PLA                 ; RESTORE REGISTERS
+  690 5880 A8                 TAY
+  691 5881 68                 PLA
+  692 5882 AA                 TAX
+  693 5883 68                 PLA
+  694 5884 60                 RTS                 ; RETURN
+  695
+  696                ;        MERGE A ROW OF 5 DOTS WITH GRAPHIC MEMORY STARTING AT BYTE
+  697                ;        ADDRESS AND BIT NUMBER IN ADP1 AND BTPT
+  698                ;        5 DOTS TO MERGE LEFT JUSTIFIED IN A
+  699                ;        PRESERVES X AND Y
+  700
+  701 5885 8D1D01    MERGE5:  STA    TEMP+1       ; SAVE INPUT DATA
+  702 5888 98                 TYA                 ; SAVE Y
+  703 5889 48                 PHA
+  704 588A AC1101             LDY    BTPT         ; OPEN UP A 5 BIT WINDOW IN GRAPHIC MEMORY
+  705 588D B9D958             LDA    MERGT5,Y     ; LEFT BITS
+  706 5890 A000               LDY    #0           ; ZERO Y
+  707 5892 31EA               AND    (ADP1),Y
+  708 5894 91EA               STA    (ADP1),Y
+  709 5896 AC1101             LDY    BTPT
+  710 5899 B9E158             LDA    MERGT5+8,Y   ; RIGHT BITS
+  711 589C A001               LDY    #1
+  712 589E 31EA               AND    (ADP1),Y
+  713 58A0 91EA               STA    (ADP1),Y
+  714 58A2 AD1D01             LDA    TEMP+1       ; SHIFT DATA RIGHT TO LINE UP LEFTMOST
+  715 58A5 AC1101             LDY    BTPT         ; DATA BIT WITH LEFTMOST GRAPHIC FIELD
+  716 58A8 F004               BEQ    MERGE2       ; SHIFT BTPT TIMES
+  717 58AA 4A        MERGE1:  LSRA
+  718 58AB 88                 DEY
+  719 58AC D0FC               BNE    MERGE1
+  720 58AE 11EA      MERGE2:  ORA    (ADP1),Y     ; OVERLAY WITH GRAPHIC MEMORY
+  721 58B0 91EA               STA    (ADP1),Y
+  722 58B2 A908               LDA    #8           ; SHIFT DATA LEFT TO LINE UP RIGHTMOST
+  723 58B4 38                 SEC                 ; DATA BIT WITH RIGHTMOST GRAPHIC FIELD
+  724 58B5 ED1101             SBC    BTPT         ; SHIFT (8-BTPT) TIMES
+  725 58B8 A8                 TAY
+  726 58B9 AD1D01             LDA    TEMP+1
+  727 58BC 0A        MERGE3:  ASLA
+  728 58BD 88                 DEY
+  729 58BE D0FC               BNE    MERGE3
+  730 58C0 C8                 INY
+  731 58C1 11EA               ORA    (ADP1),Y     ; OVERLAY WITH GRAPHIC MEMORY
+  732 58C3 91EA               STA    (ADP1),Y
+  733 58C5 68                 PLA                 ; RESTORE Y
+  734 58C6 A8                 TAY
+  735 58C7 60                 RTS                 ; RETURN
+  736
+  737 58C8 0080C0E0  MERGTL:  .BYTE  X'00,X'80,X'C0,X'E0  ; MASKS FOR MERGE LEFT
+  738 58CC F0F8FCFE           .BYTE  X'F0,X'F8,X'FC,X'FE  ; CLEAR ALL BITS TO THE RIGHT OF
+  739 58D0 FF                 .BYTE  X'FF                 ; AND INCLUDING BIT N (0=MSB)
+  740
+VMSUP  K-1008 VM GRAPHIC SUP
+GRAPHIC MERGE ROUTINES
+
+  741 58D1 7F3F1F0F  MERGTR:  .BYTE  X'7F,X'3F,X'1F,X'0F  ; MASKS FOR MERGE RIGHT
+  742 58D5 07030100           .BYTE  X'07,X'03,X'01,X'00  ; CLEAR ALL BITS TO THE LEFT OF
+  743                                                     ; AND INCLUDING BIT N (0=MSB)
+  744
+  745 58D9 0783C1E0  MERGT5:  .BYTE  X'07,X'83,X'C1,X'E0  ; TABLE OF MASKS FOR OPENING UP
+  746 58DD F0F8FCFE           .BYTE  X'F0,X'F8,X'FC,X'FE  ; A 5 BIT WINDOW ANYWHERE
+  747 58E1 FFFFFFFF           .BYTE  X'FF,X'FF,X'FF,X'FF  ; IN GRAPHIC MEMORY
+  748 58E5 7F3F1F0F           .BYTE  X'7F,X'3F,X'1F,X'0F
+  749
+                              .PAGE  'DTEXT - SOPHISTICATED TEXT DISPLAY ROUTINE'
+  750                ;        DTEXT - SOPHISTICATED TEXT DISPLAY ROUTINE
+  751                ;        CURSOR IS ADDRESSED IN TERMS OF X AND Y COORDINATES.
+  752                ;        CURSOR POSITION IS IN X1CORD AND Y1CORD WHICH IS THE
+  753                ;        COORDINATES OF THE UPPER LEFT CORNER OF THE CHARACTER POINTED
+  754                ;        TO BY THE CURSOR.
+  755                ;        CURSOR POSITIONING MAY BE ACCOMPLISHED BY DIRECTLY
+  756                ;        MODIFYING X1CORD,Y1CORD OR BY ASCII CONTROL CODES OR BY
+  757                ;        CALLING THE CURSOR MOVEMENT SUBROUTINES DIRECTLY.
+  758                ;        LIKEWISE BASELINE SHIFT FOR SUB AND SUPERSCRIPT MAY BE DONE
+  759                ;        DIRECTLY OR WITH CONTROL CHARACTERS.
+  760                ;        ADDITIONAL CONTROL CHARACTER FUNCTIONS ARE EASILY ADDED BY
+  761                ;        ADDING ENTRIES TO A DISPATCH TABLE AND CORRESPONDING SERVICE
+  762                ;        ROUTINES
+  763                ;        CURSOR IS A NON-BLINKING UNDERLINE
+  764
+  765                ;        CONTROL CODES RECOGNIZED:
+  766                ;        CR  X'0D  SETS CURSOR TO LEFT SCREEN EDGE
+  767                ;        LF  X'0A  MOVES CURSOR DOWN ONE LINE, SCROLLS DISPLAY BOUNDED
+  768                ;                  BY THE MARGINS UP ONE LINE IF ALREADY ON BOTTOM LINE
+  769                ;        BS  X'08  MOVES CURSOR ONE CHARACTER LEFT
+  770                ;        FF  X'0C  CLEARS SCREEN BETWEEN THE MARGINS AND PUTS CURSOR AT
+  771                ;                  TOP AND LEFT MARGIN
+  772                ;        SI  X'0F  MOVES BASELINE UP 3 SCAN LINES FOR SUPERSCRIPTS
+  773                ;        SO  X'0E  MOVES BASELINE DOWN 3 SCAN LINES FOR SUBSCRIPTS
+  774                ;        DC1 X'11  MOVES CURSOR LEFT ONE CHARACTER WIDTH
+  775                ;        DC2 X'12  MOVES CURSOR RIGHT ONE CHARACTER WIDTH
+  776                ;        DC3 X'13  MOVES CURSOR UP ONE CHARACTER HEIGHT
+  777                ;        DC4 X'14  MOVES CURSOR DOWN ONE CHARACTER HEIGHT
+  778                ;                  NO WRAPAROUND OR SCROLLING IS DONE WHEN DC1-DC4 IS
+  779                ;                  USED TO MOVE THE CURSOR.
+  780
+  781                ;        WHEN CALLS TO DTEXT ARE INTERMINGLED WITH CALLS TO THE GRAPHIC
+  782                ;        ROUTINES, CSRINS AND CSRDEL SHOULD BE CALLED TO INSERT AND
+  783                ;        DELETE THE CURSOR RESPECTIVELY.  LIKEWISE THESE ROUTINES
+  784                ;        SHOULD BE USED WHEN THE USER PROGRAM DIRECTLY MODIFIES THE
+  785                ;        CURSOR POSITION BY CHANGING X1CORD AND YICORD. IF THIS IS
+  786                ;        NOT DONE, THE CURSOR SYMBOL MAY NOT SHOW UNTIL THE FIRST
+  787                ;        CHARACTER HAS BEEN DRAWN OR MAY REMAIN AT THE LAST CHARACTER
+  788                ;        DRAWN.
+  789
+  790                ;        DTEXT USES A VIRTUAL PAGE DEFINED BY TOP, BOTTOM, LEFT, AND
+  791                ;        RIGHT MARGINS.  CURSOR MOVEMENT, SCROLLING, CLEARING, AND TEXT
+  792                ;        DISPLAY IS RESTRICTED TO THE AREA DEFINED BY TMAR, BMAR, LMAR,
+  793                ;        AND RMAR RESPECTIVELY.  VALID MARGIN SETTINGS ARE ASSUMED
+  794                ;        WHICH MEANS THAT THE MARGINS DEFINE SPACE AT LEAST TWO
+  795                ;        CHARACTERS WIDE BY ONE LINE HIGH AND THAT ALL OF THEM ARE
+  796                ;        VALID COORDINATES.  A CONVENIENCE ROUTINE, DTXTIN, MAY BE
+  797                ;        CALLED TO INITIALIZE THE MARGINS FOR USE OF THE FULL SCREEN IN
+  798                ;        PURE TEXT DISPLAY APPLICATIONS.
+  799
+  800                ;        AUTOMATIC SCROLLING IS PERFORMED BY THE LINE FEED CONTROL
+  801                ;        CHARACTER PROCESSOR.  FOR SCROLLING TO FUNCTION PROPERLY, AT
+  802                ;        LEAST TWO LINES OF CHARACTERS MUST FIT BETWEEN THE TOP AND
+  803                ;        BOTTOM MARGINS AND SUPERSCRIPTS AND SUBSCRIPTS SHOULD BE
+VMSUP  K-1008 VM GRAPHIC SUP
+DTEXT - SOPHISTICATED TEXT DISPLAY ROUTINE
+
+  804                ;        AVOIDED UNLESS CHHIW IS REDEFINED TO PROVIDE ENOUGH WINDOW
+  805                ;        AREA TO HOLD THE SHIFTED CHARACTERS WITHOUT OVERLAP WITH
+  806                ;        ADJECANT LINES.
+  807
+  808                ;        DTXTIN MAY BE CALLED TO INITIALIZE DTEXT FOR USE AS A FULL
+  809                ;        SCREEN TEXT DISPLAY ROUTINE.  SETS MARGINS FOR FULL SCREEN
+  810                ;        OPERATION, CLEARS THE SCREEN, AND SETS THE CURSOR AT THE UPPER
+  811                ;        LEFT CORNER OF THE SCREEN. THE USER MUST STILL SET VMORG
+  812                ;        HOWEVER!
+  813
+  814                ;        DTXTIN - CONVENIENT INITIALIZE ROUTINE FOR FULL SCREEN USE OF
+  815                ;        DTEXT.
+  816
+  817 58E9 A900      DTXTIN:  LDA    #0           ; SET LEFT AND BOTTOM MARGINS TO ZERO
+  818 58EB 8D0D01             STA    LMAR
+  819 58EE 8D0E01             STA    LMAR+1
+  820 58F1 8D0B01             STA    BMAR
+  821 58F4 8D0C01             STA    BMAR+1
+  822 58F7 A9C7               LDA    #NY-1&X'FF   ; SET TOP MARGIN TO TOP OF SCREEN
+  823 58F9 8D0901             STA    TMAR
+  824 58FC A900               LDA    #NY-1/256
+  825 58FE 8D0A01             STA    TMAR+1
+  826 5901 A93F               LDA    #NX-1&X'FF   ; SET RIGHT MARGIN TO RIGHT EDGE OF SCREEN
+  827 5903 8D0F01             STA    RMAR
+  828 5906 A901               LDA    #NX-1/256
+  829 5908 8D1001             STA    RMAR+1
+  830 590B A90C               LDA    #X'0C        ; CLEAR SCREEN AND PUT CURSOR AT UPPER
+  831                                             ; LEFT CORNER BY SENDING AN ASCII FF
+  832                                             ; CONTROL CHARACTER TO DTEXT.  THEN FALL
+  833                                             ; INTO DTEXT.
+  834
+  835                ;        DTEXT - DISPLAY ASCII TEXT ROUTINE
+  836                ;        ENTER WITH ASCII CHARACTER CODE TO DISPLAY OR INTERPRET IN A.
+  837                ;        PRESERVES ALL REGISTERS.
+  838
+  839 590D 48        DTEXT:   PHA                 ; SAVE THE REGISTERS
+  840 590E 8A                 TXA
+  841 590F 48                 PHA
+  842 5910 98                 TYA
+  843 5911 48                 PHA
+  844 5912 BA                 TSX                 ; GET INPUT BACK
+  845 5913 BD0301             LDA    X'103,X      ; FROM THE STACK
+  846 5916 297F               AND    #X'7F        ; INSURE 7 BIT ASCII INPUT
+  847 5918 C920               CMP    #X'20        ; TEST IF A CONTROL CHARACTER
+  848 591A 300C               BMI    DTEXT1       ; JUMP AHEAD IF SO
+  849 591C 20BD57             JSR    DCHAR        ; FOR A REGULAR TEXT CHARACTER, DISPLAY IT
+  850 591F 20F05B             JSR    CSRR         ; DO A CURSOR RIGHT
+  851 5922 68        DTEXTR:  PLA                 ; RESTORE THE REGISTERS
+  852 5923 A8                 TAY
+  853 5924 68                 PLA
+  854 5925 AA                 TAX
+  855 5926 68                 PLA
+  856 5927 60                 RTS                 ; AND RETURN
+  857
+  858 5928 A200      DTEXT1:  LDX    #0           ; SET UP A LOOP TO SEARCH THE CONTROL
+VMSUP  K-1008 VM GRAPHIC SUP
+DTEXT - SOPHISTICATED TEXT DISPLAY ROUTINE
+
+  859 592A DD585C    DTEXT2:  CMP    CCTAB,X      ; CHARACTER TABLE FOR A MATCH
+  860 592D F009               BEQ    DTEXT3       ; JUMP IF A MATCH
+  861 592F E8                 INX                 ; BUMP X TO POINT TO NEXT TABLE ENTRY
+  862 5930 E8                 INX
+  863 5931 E8                 INX
+  864 5932 E01E               CPX    #CCTABE-CCTAB; TEST IF ENTIRE TABLE SEARCHED
+  865 5934 D0F4               BNE    DTEXT2       ; LOOP IF NOT
+  866 5936 F0EA               BEQ    DTEXTR       ; GO RETURN IF ENTIRE TABLE SEARCHED
+  867
+  868 5938 BD5A5C    DTEXT3:  LDA    CCTAB+2,X    ; JUMP TO THE ADDRESS IN THE NEXT TWO
+  869 593B 48                 PHA                 ; TABLE BYTES
+  870 593C BD595C             LDA    CCTAB+1,X
+  871 593F 48                 PHA
+  872 5940 60                 RTS
+  873
+                              .PAGE 'SERVICE ROUTINES FOR CONTROL CHARACTERS'
+  874                ;        SERVICE ROUTINES FOR CONTROL CHARACTERS.  DO THE INDICATED
+  875                ;        FUNCTION AND JUMP TO DTEXTR TO RESTORE REGISTERS AND RETURN.
+  876
+  877                ;        CRR - CURSOR RIGHT
+  878
+  879 5941 20F05B    CRR:     JSR    CSRR         ; NOVE CURSOR RIGHT
+  880 5944 4C2259             JMP    DTEXTR       ; GO RETURN
+  881
+  882                ;        CRL - CURSOR LEFT AND BACKSPACE
+  883
+  884 5947 200A5C    CRL:     JSR    CSRL         ; MOVE CURSOR LEFT
+  885 594A 4C2259             JMP    DTEXTR       ; GO RETURN
+  886
+  887                ;        CRU - CURSOR UP
+  888
+  889 594D 20245C    CRU:     JSR    CSRU         ; NOVE CURSOR UP
+  890 5950 4C2259             JMP    DTEXTR       ; GO RETURN
+  891
+  892                ;        CRD - CURSOR DOWD
+  893
+  894 5953 203E5C    CRD:     JSR    CSRD         ; NOVE CURSOR DOWN
+  895 5956 4C2259             JMP    DTEXTR       ; GO RETURN
+  896
+  897                ;        BASUP - SHIFT BASELINE UP 3 SCAN LINES
+  898                ;        NOTE - NO RANGE CHECK ON THE Y COORDINATE IS MADE
+  899                ;        BASELINE SHIFTING SHOULD ONLY BE DONE AT A BLANK CHARACTER
+  900                ;        POSITION
+  901
+  902 5959 20C95B    BASUP:   JSR    CSRDEL       ; DELETE CURRENT CURSOR
+  903 595C AD0301             LDA    Y1CORD       ; INCREMENT COORDINATE BY 3
+  904 595F 18                 CLC
+  905 5960 6903               ADC    #3
+  906 5962 8D0301             STA    Y1CORD
+  907 5965 9003               BCC    BASUP1
+  908 5967 EE0401             INC    Y1CORD+1
+  909 596A 20C55B    BASUP1:  JSR    CSRINS       ; DISPLAY CURSOR AT NEW LOCATION
+  910 596D 4C2259             JMP    DTEXTR       ; GO RETURN
+  911
+  912                ;        BASDN - SHIFT BASELINE DOEN 3 SCAN LINES
+  913                ;        NOTE - NO RANGE CHECK ON THE Y COORDINATE IS MADE
+  914                ;        BASELINE SHIFTING SHOULD ONLY BE DONE AT A BLANK CHARACTER
+  915                ;        POSITION
+  916
+  917 5970 20C95B    BASDN:   JSR    CSRDEL       ; DELETE CURRENT CURSOR
+  918 5973 AD0301             LDA    Y1CORD       ; INCREMENT COORDINATE BY 3
+  919 5976 38                 SEC
+  920 5977 E903               SBC    #3
+  921 5979 8D0301             STA    Y1CORD
+  922 597C B003               BCS    BASDN1
+  923 597E CE0401             DEC    Y1CORD+1
+  924 5981 20C55B    BASDN1:  JSR    CSRINS       ; DISPLAY CURSOR AT NEW LOCATION
+  925 5984 4C2259             JMP    DTEXTR       ; GO RETURN
+  926
+  927                ;        CARRET - CARRIAGE RETURN
+VMSUP  K-1008 VM GRAPHIC SUP
+SERVICE ROUTINES FOR CONTROL CHARACTERS
+
+  928
+  929 5987 20C95B    CARRET:  JSR    CSRDEL       ; DELETE CURRENT CURSOR
+  930 598A AD0D01             LDA    LMAR         ; SET X1CORD TO THE LEFT MARGIN
+  931 598D 8D0101             STA    X1CORD
+  932 5990 AD0E01             LDA    LMAR+1
+  933 5993 8D0201             STA    X1CORD+1
+  934 5996 20C55B             JSR    CSRINS       ; DISPLAY CURSOR AT NEW LOCATION
+  935 5999 4C2259             JMP    DTEXTR       ; GO RETURN
+  936
+  937                ;        LNFED - LINE FEED ROUTINE, SCROLLS IF NOT SUFFICIENT SPACE
+  938                ;                AT THE BOTTOM FOR A NEW LINE
+  939
+  940 599C 20695B    LNFED:   JSR    DNTST        ; TEST IF CURSOR IS TOO FAR DOWN TO ALLOW
+  941 599F 9006               BCC    LNFED1       ; MOVEMENT
+  942 59A1 203E5C             JSR    CSRD         ; IF OK, DO A SIMPLE CURSOR DOWN
+  943 59A4 4C2259             JMP    DTEXTR       ; AND GO RETURN
+  944 59A7 20C95B    LNFED1:  JSR    CSRDEL       ; DELETE CURRENT CURSOR
+  945 59AA 20ED5A             JSR    RECTP        ; SAVE CURSOR COORDINATES AND PROCESS
+  946                                             ; CORNER DATA
+  947 59AD AD1201    LNFED0:  LDA    TLBYT        ; ADD CHHIW SCAN LINES TO ADDRESS OF TOP
+  948 59B0 18                 CLC                 ; LEFT CORNER TO ESTABLISH ADDRESS OF
+  949 59B1 69B8               ADC    #CHHIW*NX/8&X'FF  ; FIRST SCAN LINE TO SCROLL
+  950 59B3 85EC               STA    ADP2         ; AND PUT INTO ADP2
+  951 59B5 AD1301             LDA    TLBYT+1
+  952 59B8 6901               ADC    #CHHIW*NX/8/256
+  953 59BA 85ED               STA    ADP2+1
+  954
+  955                ;        MOVE LEFT PARTIAL BYTE
+  956
+  957 59BC AD1201    LNFED2:  LDA    TLBYT        ; MOVE CURRENT TOP LEFT BYTE ADDRESS INTO
+  958 59BF 85EA               STA    ADP1         ; ADP1
+  959 59C1 AD1301             LDA    TLBYT+1
+  960 59C4 85EB               STA    ADP1+1
+  961 59C6 AD1801             LDA    TLBIT        ; MOVE LEFT BIT ADDRESS TO BTPT
+  962 59C9 8D1101             STA    BTPT
+  963 59CC A000               LDY    #0
+  964 59CE B1EC               LDA    (ADP2),Y     ; MOVE A PARTIAL BYTE FROM (ADP2)
+  965 59D0 203558             JSR    MERGEL       ; TO (ADP1) ACCORDING TO BTPT
+  966
+  967                ;        MOVE FULL BYTES IN THE MIDDLE
+  968
+  969 59D3 E6EA      LNFED3:  INC    ADP1         ; INCREMENT ADP1
+  970 59D5 D002               BNE    LNFED4
+  971 59D7 E6EB               INC    ADP1+1
+  972 59D9 E6EC      LNFED4:  INC    ADP2         ; INCREMENT ADP2
+  973 59DB D002               BNE    LNFED5
+  974 59DD E6ED               INC    ADP2+1
+  975 59DF E6EA      LNFED5:  INC    ADP1         ; TEST IF EQUAL TO CURRENT TOP RIGHT BYTE
+  976 59E1 CD1401             CMP    TRBYT        ; ADDRESS
+  977 59E4 D007               BNE    LNFED6       ; SKIP AHEAD IF NOT
+  978 59E6 A5EB               LDA    ADP1+1
+  979 59E8 CD1501             CMP    TRBYT+1
+  980 59EB F007               BEQ    LNFED7       ; GO TO RIGHT PARTIAL BYTE PROCESSING IF =
+  981 59ED B1EC      LNFED6:  LDA    (ADP2),Y     ; MOVE A BYTE
+  982 59EF 91EA               STA    (ADP1),Y
+VMSUP  K-1008 VM GRAPHIC SUP
+SERVICE ROUTINES FOR CONTROL CHARACTERS
+
+  983 59F1 4CD359             JMP    LNFED3       ; GO PROCESS NEXT BYTE
+  984
+  985                ;        MOVE RIGHT PARTIAL BYTE
+  986
+  987 59F4 AD1901    LNFED7:  LDA    TRBIT        ; MOVE RIGHT BIT ADDRESS TO BTPT
+  988 59F7 8D1101             STA    BTPT
+  989 59FA B1EC               LDA    (ADP2),Y     ; MOVE A PARTIAL BYTE FROM (ADP2) TO
+  990 59FC 205D58             JSR    MERGER       ; (ADP1) ACCORDING TO BTPT
+  991 59FF A5EC               LDA    ADP2         ; TEST IF ADP2 = BRBYT
+  992 5A01 CD1601             CMP    BRBYT
+  993 5A04 D009               BNE    LNFED8       ; JUMP AHEAD IF NOT
+  994 5A06 A5ED               LDA    ADP2+1
+  995 5A08 CD1701             CMP    BRBYT+1
+  996 5A0B D002               BNE    LNFED8       ; JUMP AHEAD IF NOT
+  997 5A0D F01F               BEQ    LNFEDB       ; FINISHED WITH MOVE PART OF SCROLL, GO
+  998                                             ; CLEAR AREA LEFT AT BOTTOM OF RECTANGLE
+  999
+ 1000                ;        PREPARE TO START NEXT LINE
+ 1001
+ 1002 5A0F AD1201    LNFED8:  LDA    TLBYT        ; ADD NX/8 TO TOP LEFT BYTE ADDRESS
+ 1003 5A12 18                 CLC
+ 1004 5A13 6928               ADC    #NX/8
+ 1005 5A15 8D1201             STA    TLBYT
+ 1006 5A18 9003               BCC    LNFED9
+ 1007 5A1A EE1301             INC    TLBYT+1
+ 1008 5A1D AD1401    LNFED9:  LDA    TRBYT        ; ADD NX/8 TO TOP RIGHT BYTE ADDRESS
+ 1009 5A20 18                 CLC
+ 1010 5A21 6928               ADC    #NX/8
+ 1011 5A23 8D1401             STA    TRBYT
+ 1012 5A26 9085               BCC    LNFED0
+ 1013 5A28 EE1501             INC    TRBYT+1
+ 1014 5A2B 4CAD59             JMP    LNFED0       ; GO MOVE NEXT SCAN LINE
+ 1015
+ 1016                ;        CLEAR REGION AT BOTTOM OF RECTANGLE FOR NEW LINE OF TEXT
+ 1017                ;        AND REINSERT CURSOR
+ 1018
+ 1019 5A2E 20735A    LNFEDB:  JSR    LNCLR        ; DO THE CLEARING
+ 1020 5A31 AD0501             LDA    X2CORD       ; RESTORE CURSOR COORDINATES
+ 1021 5A34 8D0101             STA    X1CORD
+ 1022 5A37 AD0601             LDA    X2CORD+1
+ 1023 5A3A 8D0201             STA    X1CORD+1
+ 1024 5A3D AD0701             LDA    Y2CORD
+ 1025 5A40 8D0301             STA    Y1CORD
+ 1026 5A43 AD0801             LDA    Y2CORD+1
+ 1027 5A46 8D0401             STA    Y1CORD+1
+ 1028 5A49 20C55B             JSR    CSRINS       ; INSERT CURSOR AT THE SAME POSITION
+ 1029 5A4C 4C2259             JMP    DTEXTR       ; GO RETURN
+ 1030
+ 1031                ;        FMFED - FORM FEED ROUTINE, CLEARS THE SCREEN BETWEEN THE
+ 1032                ;                MARGINS AND PLACES CURSOR AT UPPER LEFT CORNER OF
+ 1033                ;                RECTANGLE DEFINED BY THE MARGINS.
+ 1034                ;        NOTE: ROUTINE MODIFIES BOTH ADDRESS POINTERS AND BOTH SETS OF
+ 1035                ;        COORDINATES.
+ 1036
+ 1037 5A4F 20ED5A    FMFED:   JSR    RECTP        ; PROCESS MARGIN DATA INTO CORNER
+VMSUP  K-1008 VM GRAPHIC SUP
+SERVICE ROUTINES FOR CONTROL CHARACTERS
+
+ 1038                                             ; BYTE AND BIT ADDRESSES
+ 1039 5A52 20735A             JSR    LNCLR        ; CLEAR THE AREA DEFINED BY THE CORNERS
+ 1040 5A55 AD0D01             LDA    LMAR         ; POSITION CURSOR AT TOP AND LEFT MARGINS
+ 1041 5A58 8D0101             STA    X1CORD
+ 1042 5A5B AD0E01             LDA    LMAR+1
+ 1043 5A5E 8D0201             STA    X1CORD+1
+ 1044 5A61 AD0901             LDA    TMAR
+ 1045 5A64 8D0301             STA    Y1CORD
+ 1046 5A67 AD0A01             LDA    TMAR+1
+ 1047 5A6A 8D0401             STA    Y1CORD+1
+ 1048 5A6D 20C55B             JSR    CSRINS       ; INSERT CURSOR
+ 1049 5A70 4C2259             JMP    DTEXTR       ; FINISGED WITH FORM FEED
+ 1050
+                              .PAGE 'MISCELLANEOUS INTERNAL SUBROUTINES'
+ 1051                ;        LNCLR - SUBROUTINE TO CLEAR AREA INSIDE OF THE MARGINS
+ 1052                ;        DEFINED BY TLBYT,TLBIT; TRBYT,TRBIT; BRBYT
+ 1053                ;        USED BY FORM FEED AND SCROLL TO CLEAR BETWEEN THE MARGINS
+ 1054                ;        CLEAR LEFT PARTIAL BYTE
+ 1055                ;        USES INDEX Y
+ 1056
+ 1057 5A73 AD1201    LNCLR:   LDA    TLBYT        ; MOVE CURRENT TOP LEFT BYTE ADDRESS INTO
+ 1058 5A76 85EA               STA    ADP1         ; ADP1
+ 1059 5A78 AD1301             LDA    TLBYT+1
+ 1060 5A7B 85EB               STA    ADP1+1
+ 1061 5A7D AD1801             LDA    TLBIT        ; MOVE LEFT BIT ADDRESS TO BTPT
+ 1062 5A80 8D1101             STA    BTPT
+ 1063 5A83 A900               LDA    #0           ; CLEAR LEFT PARTIAL BYTE
+ 1064 5A85 203558             JSR    MERGEL
+ 1065
+ 1066                ;        CLEAR FULL BYTES IN THE MIDDLE
+ 1067
+ 1068 5A88 E6EA      LNCLR1:  INC    ADP1         ; INCREMENT ADP1
+ 1069 5A8A D002               BNE    LNCLR2
+ 1070 5A8C E6EB               INC    ADP1+1
+ 1071 5A8E A5EA      LNCLR2:  LDA    ADP1         ; TEST IF EQUAL TO CURRENT TOP RIGHT BYTE
+ 1072 5A90 CD1401             CMP    TRBYT        ; ADDRESS
+ 1073 5A93 D007               BNE    LNCLR3       ; SKIP AHEAD IF NOT
+ 1074 5A95 A5EB               LDA    ADP1+1
+ 1075 5A97 CD1501             CMP    TRBYT+1
+ 1076 5A9A F007               BEQ    LNCLR4       ; GO TO RIGHT PARTIAL BYTE PROCESSING IF =
+ 1077 5A9C A900      LNCLR3:  LDA    #0           ; ZERO A BYTE
+ 1078 5A9E A8                 TAY
+ 1079 5A9F 91EA               STA    (ADP1),Y
+ 1080 5AA1 F0E5               BEQ    LNCLR1       ; LOOP UNTIL ALL FULL BYTES ON THIS LINE
+ 1081                                             ; HAVE BEEN CLEARED
+ 1082
+ 1083                ;        CLEAR RIGHT PARTIAL BYTE
+ 1084
+ 1085 5AA3 AD1901    LNCLR4:  LDA    TRBIT        ; MOVE RIGHT BIT ADDRESS TO BTPT
+ 1086 5AA6 8D1101             STA    BTPT
+ 1087 5AA9 A900               LDA    #0           ; CLEAR RIGHT PARTIAL BYTE
+ 1088 5AAB 205D58             JSR    MERGER
+ 1089 5AAE A5EA               LDA    ADP1         ; TEST IF ADP1 = BRBYT
+ 1090 5AB0 CD1601             CMP    BRBYT
+ 1091 5AB3 D008               BNE    LNCLR5       ; JUMP AHEAD IF NOT
+ 1092 5AB5 A5EB               LDA    ADP1+1
+ 1093 5AB7 CD1701             CMP    BRBYT+1
+ 1094 5ABA D001               BNE    LNCLR5       ; JUMP AHEAD IF NOT
+ 1095 5ABC 60                 RTS                 ; FINISHED WITH CLEAR IF SO
+ 1096
+ 1097                ;        PREPARE TO STAR NEXT LINE
+ 1098
+ 1099 5ABD AD1201    LNCLR5:  LDA    TLBYT        ; ADD NX/8 TO TOP LEFT BYTE ADDRESS
+ 1100 5AC0 18                 CLC
+ 1101 5AC1 6928               ADC    #NX/8
+ 1102 5AC3 8D1201             STA    TLBYT
+ 1103 5AC6 9003               BCC    LNCLR6
+ 1104 5AC8 EE1301             INC    TLBYT+1
+VMSUP  K-1008 VM GRAPHIC SUP
+MISCELLANEOUS INTERNAL SUBROUTINES
+
+ 1105 5ACB AD1401    LNCLR6:  LDA    TRBYT        ; ADD NX/8 TO TOP RIGHT BYTE ADDRESS
+ 1106 5ACE 18                 CLC
+ 1107 5ACF 6928               ADC    #NX/8
+ 1108 5AD1 8D1401             STA    TRBYT
+ 1109 5AD4 909D               BCC    LNCLR        ; GO PROCESS NEXT LINE
+ 1110 5AD6 EE1501             INC    TRBYT+1
+ 1111 5AD9 4C735A             JMP    LNCLR
+ 1112
+ 1113                ;        SADP2L - SHIFT ADP2 LEFT 1 BIT POSITION
+ 1114                ;        NO REGISTERS BOTHERED
+ 1115
+ 1116 5ADC 06EC      SADP2L:  ASL    ADP2         ; SHIFT LOW PART
+ 1117 5ADE 26ED               ROL    ADP2+1       ; SHIFT HIGH PART
+ 1118 5AE0 60                 RTS                 ; RETURN
+ 1119
+ 1120                ;        DN1SCN - SUBROUTINE TO ADD NX/8 TO ADP1 TO EFFECT A DOWN
+ 1121                ;        SHIFT OF ONE SCAN LINE
+ 1122                ;        INDEX REGISTERS PRESERVED
+ 1123
+ 1124 5AE1 A5EA      DN1SCN:  LDA    ADP1         ; ADD NX/8 TO LOW ADP1
+ 1125 5AE3 18                 CLC
+ 1126 5AE4 6928               ADC    #NX/8
+ 1127 5AE6 85EA               STA    ADP1
+ 1128 5AE8 9002               BCC    DN1SC1
+ 1129 5AEA E6EB               INC    ADP1+1       ; INCREMENT HIGH PART IF CARRY FROM LOW
+ 1130 5AEC 60        DN1SC1:  RTS                 ; RETURN
+ 1131
+ 1132                ;        SUBROUTINE TO ESTABLISH USEFUL DATA ABOUT THE RECTANGLE
+ 1133                ;        DEFINED BY THE TEXT MARGINS IN TERMS OF BYTE AND BIT ADDR.
+ 1134                ;        TLBYT AND TLBIT DEFINE THE UPPER LEFT CORNER, TRBYT AND TRBIT
+ 1135                ;        DEFINE UPPER RIGHT CORNER, BRBYT DEFINES BOTTOM RIGHT CORNER
+ 1136
+ 1137 5AED AD0101    RECTP:   LDA    X1CORD       ; SAVE CURRENT CURSOR POSITION IN
+ 1138 5AF0 8D0501             STA    X2CORD       ; X2CORD AND Y2CORD
+ 1139 5AF3 AD0201             LDA    X1CORD+1
+ 1140 5AF6 8D0601             STA    X2CORD+1
+ 1141 5AF9 AD0301             LDA    Y1CORD
+ 1142 5AFC 8D0701             STA    Y2CORD
+ 1143 5AFF AD0401             LDA    Y1CORD+1
+ 1144 5B02 8D0801             STA    Y2CORD+1
+ 1145 5B05 AD0D01             LDA    LMAR         ; ESTABLISH BYTE AND BIR ADDRESSES OF
+ 1146 5B08 8D0101             STA    X1CORD       ; TOP LEFT CORNER
+ 1147 5B0B AD0E01             LDA    LMAR+1
+ 1148 5B0E 8D0201             STA    X1CORD+1
+ 1149 5B11 AD0901             LDA    TMAR
+ 1150 5B14 8D0301             STA    Y1CORD
+ 1151 5B17 AD0A01             LDA    TMAR+1
+ 1152 5B1A 8D0401             STA    Y1CORD+1
+ 1153 5B1D 202155             JSR    PIXADR
+ 1154 5B20 A5EA               LDA    ADP1
+ 1155 5B22 8D1201             STA    TLBYT
+ 1156 5B25 A5EB               LDA    ADP1+1
+ 1157 5B27 8D1301             STA    TLBYT+1
+ 1158 5B2A AD1101             LDA    BTPT
+ 1159 5B2D 8D1801             STA    TLBIT
+VMSUP  K-1008 VM GRAPHIC SUP
+MISCELLANEOUS INTERNAL SUBROUTINES
+
+ 1160 5B30 AD0F01             LDA    RMAR         ; ESTABLISH BYTE AND BIT ADDRESSES OF TOP
+ 1161 5B33 8D0101             STA    X1CORD       ; RIGHT CORNER
+ 1162 5B36 AD1001             LDA    RMAR+1
+ 1163 5B39 8D0201             STA    X1CORD+1
+ 1164 5B3C 202155             JSR    PIXADR
+ 1165 5B3F A5EA               LDA    ADP1
+ 1166 5B41 8D1401             STA    TRBYT
+ 1167 5B44 A5EB               LDA    ADP1+1
+ 1168 5B46 8D1501             STA    TRBYT+1
+ 1169 5B49 AD1101             LDA    BTPT
+ 1170 5B4C 8D1901             STA    TRBIT
+ 1171 5B4F AD0B01             LDA    BMAR         ; ESTABLISH BYTE ADDRESS OF BOTTOM RIGHT
+ 1172 5B52 8D0301             STA    Y1CORD       ; CORNER; BIT ADDRESS IS SAME AS BIT
+ 1173 5B55 AD0C01             LDA    BMAR+1       ; ADDRESS OF TOP RIGHT CORNER
+ 1174 5B58 8D0401             STA    Y1CORD+1
+ 1175 5B5B 202155             JSR    PIXADR
+ 1176 5B5E A5EA               LDA    ADP1
+ 1177 5B60 8D1601             STA    BRBYT
+ 1178 5B63 A5EB               LDA    ADP1+1
+ 1179 5B65 8D1701             STA    BRBYT+1
+ 1180 5B68 60                 RTS                 ; RETURN
+ 1181
+                              .PAGE  'CURSOR-BORDER LIMIT TEST ROUTINES'
+ 1182                ;        CURSOR-BORDER LIMIT TEST ROUTINES
+ 1183                ;        TESTS IF ENOUGH SPACE TO ALLOW CURSOR MOVEMENT IN ANY OF 4
+ 1184                ;        RETURNS WITH POSITIVE OR ZERO RESULT IF ENOUGH
+ 1185                ;        SPACE AND A NEGATIVE RESULT IF NOT ENOUGH SPACE.
+ 1186                ;        SUBROUTINES USE A AND X
+ 1187
+ 1188 5B69 AD0301    DNTST:   LDA    Y1CORD       ; COMPUTE Y1CORD-BMAR-(2*CHHIW-2)
+ 1189 5B6C 38                 SEC
+ 1190 5B6D ED0B01             SBC    BMAR         ; SIGN OF RESULT
+ 1191 5B70 AA                 TAX                 ; - NOT OK
+ 1192 5B71 AD0401             LDA    Y1CORD+1     ; Z OK
+ 1193 5B74 ED0C01             SBC    BMAR+1       ; + OK
+ 1194 5B77 48                 PHA
+ 1195 5B78 8A                 TXA
+ 1196 5B79 38                 SEC
+ 1197 5B7A E914               SBC    #2*CHHIW-2
+ 1198 5B7C 68                 PLA
+ 1199 5B7D E900               SBC    #0
+ 1200 5B7F 60                 RTS
+ 1201
+ 1202 5B80 AD0901    UPTST:   LDA    TMAR         ; COMPUTE TMAR-Y1CORD-CHHIW
+ 1203 5B83 38                 SEC
+ 1204 5B84 ED0301             SBC    Y1CORD       ; SIGN OF RESULT
+ 1205 5B87 AA                 TAX                 ; - NOT OK
+ 1206 5B88 AD0A01             LDA    TMAR+1       ; Z OK
+ 1207 5B8B ED0401             SBC    Y1CORD+1     ; + OK
+ 1208 5B8E 48                 PHA
+ 1209 5B8F 8A                 TXA
+ 1210 5B90 38                 SEC
+ 1211 5B91 E90B               SBC    #CHHIW
+ 1212 5B93 68                 PLA
+ 1213 5B94 E900               SBC    #0
+ 1214 5B96 60                 RTS
+ 1215
+ 1216 5B97 AD0101    LFTST:   LDA    X1CORD       ; COMPUTE X1CORD-LMAR-CHWIDW
+ 1217 5B9A 38                 SEC
+ 1218 5B9B ED0D01             SBC    LMAR         ; SIGN OF RESULT
+ 1219 5B9E AA                 TAX                 ; - NOT OK
+ 1220 5B9F AD0201             LDA    X1CORD+1     ; Z OK
+ 1221 5BA2 ED0E01             SBC    LMAR+1       ; + OK
+ 1222 5BA5 48                 PHA
+ 1223 5BA6 8A                 TXA
+ 1224 5BA7 38                 SEC
+ 1225 5BA8 E906               SBC    #CHWIDW
+ 1226 5BAA 68                 PLA
+ 1227 5BAB E900               SBC    #0
+ 1228 5BAD 60                 RTS
+ 1229
+ 1230 5BAE AD0F01    RTTST:   LDA    RMAR         ; COMPUTE RMAR-X1CORD-(2*CHWIDW-2)
+ 1231 5BB1 38                 SEC
+ 1232 5BB2 ED0101             SBC    X1CORD       ; SIGN OF RESULT
+ 1233 5BB5 AA                 TAX                 ; - NOT OK
+ 1234 5BB6 AD1001             LDA    RMAR+1       ; Z OK
+ 1235 5BB9 ED0201             SBC    X1CORD+1     ; + OK
+VMSUP  K-1008 VM GRAPHIC SUP
+CURSOR-BORDER LIMIT TEST ROUTINES
+
+ 1236 5BBC 48                 PHA
+ 1237 5BBD 8A                 TXA
+ 1238 5BBE 38                 SEC
+ 1239 5BBF E90A               SBC    #2*CHWIDW-2
+ 1240 5BC1 68                 PLA
+ 1241 5BC2 E900               SBC    #0
+ 1242 5BC4 60                 RTS
+ 1243
+                              .PAGE  'CURSOR MANIPULATION ROUTINES'
+ 1244                ;        CSRINS - INSERT A CURSOR AT THE CURRENT CURSOR POSITION
+ 1245                ;                 WHICH IS DEFINED BY X1CORD,Y1CORD
+ 1246                ;        CSRDEL - REMOVE THE CURSOR WHICH IS ASSUMED TO BE AT THE
+ 1247                ;                 CURRENT CURSOR POSITION
+ 1248                ;        CURSOR IS DISPLAYED AS AN UNDERLINE CHHIM+1 SCAN LINES BELOW
+ 1249                ;        ACTUAL CHARACTER COORDINATES WHICH SPECIFY THE LOCATION OF THE
+ 1250                ;        UPPER LEFT CORNER OF THE CHARACTER
+ 1251                ;        INDEX REGISTERS PRESERVED
+ 1252
+ 1253 5BC5 A9F8      CSRINS:  LDA    #X'F8        ; SET A FOR INSERTING THE CURSOR
+ 1254 5BC7 D002               BNE    CSR
+ 1255 5BC9 A900      CSRDEL:  LDA    #0           ;  SET A FOR DELETING THE CURSOR
+ 1256
+ 1257 5BCB 48        CSR:     PHA                 ; SAVE A
+ 1258 5BCC AD0301             LDA    Y1CORD       ; TEMPORARILY SUBTRACT CHHIM FROM Y1CORD
+ 1259 5BCF 38                 SEC
+ 1260 5BD0 E909               SBC    #CHHIM
+ 1261 5BD2 8D0301             STA    Y1CORD
+ 1262 5BD5 B003               BCS    CSR1
+ 1263 5BD7 CE0201             DEC    Y1CORD-1
+ 1264 5BDA 202155    CSR1:    JSR    PIXADR       ; COMPUTE ADDRESS OF CURSOR MARK
+ 1265 5BDD 68                 PLA                 ; RESTORE SAVED A
+ 1266 5BDE 208558             JSR    MERGE5       ; MERGE CURSOR DATA WITH DISPLAY MEMORY
+ 1267 5BE1 AD0301             LDA    Y1CORD       ; RESTORE YICORD BY ADDING CHHIM BACK
+ 1268 5BE4 18                 CLC
+ 1269 5BE5 6909               ADC    #CHHIM
+ 1270 5BE7 8D0301             STA    Y1CORD
+ 1271 5BEA 9003               BCC    CSR2
+ 1272 5BEC EE0401             INC    Y1CORD+1
+ 1273 5BEF 60        CSR2:    RTS                 ; RETURN
+ 1274
+ 1275                ;        CSRR - MOVE CURSOR RIGHT ROUTINE
+ 1276                ;        DO NOTHING IF AGAINST RIGHT MARGIN
+ 1277                ;        USES X AND A
+ 1278
+ 1279 5BF0 20AE5B    CSRR:    JSR    RTTST        ; TEST IF CURSOR CAN GO RIGHT
+ 1280 5BF3 3014               BMI    CSRR2        ; GO RETURN IF NOT ENOUGH ROOM
+ 1281 5BF5 20C95B             JSR    CSRDEL       ; DELETE THE PRESENT CURSOR
+ 1282 5BF8 AD0101             LDA    X1CORD       ; ADD CHARACTER WINDOW WIDTH TO X
+ 1283 5BFB 18                 CLC                 ; COORDINATE
+ 1284 5BFC 6906               ADC    #CHWIDW
+ 1285 5BFE 8D0101             STA    X1CORD
+ 1286 5C01 9003               BCC    CSRR1
+ 1287 5C03 EE0201             INC    X1CORD+1
+ 1288 5C06 20C55B    CSRR1:   JSR    CSRINS       ; DISPLAY CURSOR AT THE NEW LOCATION
+ 1289 5C09 60        CSRR2:   RTS                 ; RETURN
+ 1290
+ 1291                ;        CSRL - MOVE CURSOR LEFT
+ 1292                ;        DO NOTHING IF AGAINST LEFT MARGIN
+ 1293                ;        USES A AND X
+ 1294
+ 1295 5C0A 20975B    CSRL:    JSR    LFTST        ; TEST IF CURSOR IS TOO FAR LEFT
+ 1296 5C0D 3014               BMI    CSRL2        ; JUMP IF IT IS TOO FAR LEFT
+ 1297 5C0F 20C95B             JSR    CSRDEL       ; DELETE THE PRESENT CURSOR
+VMSUP  K-1008 VM GRAPHIC SUP
+CURSOR MANIPULATION ROUTINES
+
+ 1298 5C12 AD0101             LDA    X1CORD       ; SUBTRACT CHARACTER WINDOW WIDTH FROM
+ 1299 5C15 38                 SEC                 ; X COORDINATE
+ 1300 5C16 E906               SBC    #CHWIDW
+ 1301 5C18 8D0101             STA    X1CORD
+ 1302 5C1B B003               BCS    CSRL1
+ 1303 5C1D CE0201             DEC    X1CORD+1
+ 1304 5C20 20C55B    CSRL1:   JSR    CSRINS       ; DISPLAY CURSOR AT THE NEW LOCATION
+ 1305 5C23 60        CSRL2:   RTS                 ; RETURN
+ 1306
+ 1307                ;        CSRU - CURSOR UP F
+ 1308                ;        DO NOTHING IF AGAINST TOP MARGIN
+ 1309                ;        USES A AND X
+ 1310
+ 1311 5C24 20805B    CSRU:    JSR    UPTST        ; TEST IF CURSOR IS TOO FAR UP
+ 1312 5C27 3014               BMI    CSRU2        ; JUMP IF IT IS TOO HIGH
+ 1313 5C29 20C95B             JSR    CSRDEL       ; DELETE THE PRESENT CURSOR
+ 1314 5C2C AD0301             LDA    Y1CORD       ; ADD CHARACTER WINDOW HEIGHT TO Y
+ 1315 5C2F 18                 CLC                 ; COORDINATE
+ 1316 5C30 690B               ADC    #CHHIW
+ 1317 5C32 8D0301             STA    Y1CORD
+ 1318 5C35 9003               BCC    CSRU1
+ 1319 5C37 EE0401             INC    Y1CORD+1
+ 1320 5C3A 20C55B    CSRU1:   JSR    CSRINS       ; DISPLAY CURSOR AT THE NEW LOCATION
+ 1321 5C3D 60        CSRU2:   RTS                 ; RETURN
+ 1322
+ 1323                ;        CSRD - CURSOR DOWN
+ 1324                ;        DO NOTHING IF AGAINST
+ 1325                ;        USES X AND A
+ 1326
+ 1327 5C3E 20695B    CSRD:    JSR    DNTST        ; TEST IF CURSOR IS TOO FAR DOWN
+ 1328 5C41 3014               BMI    CSRD2        ; JUMP IF NOT ENOUGH SPACE
+ 1329 5C43 20C95B             JSR    CSRDEL       ; DELETE THE CURRENT CURSOR
+ 1330 5C46 AD0301             LDA    Y1CORD       ; SUBTRACT CHARACTER WINDOW HEIGHT FROM
+ 1331 5C49 38                 SEC                 ; Y COORDINATE
+ 1332 5C4A E90B               SBC    #CHHIW
+ 1333 5C4C 8D0301             STA    Y1CORD
+ 1334 5C4F B003               BCS    CSRD1
+ 1335 5C51 CE0401             DEC    Y1CORD+1
+ 1336 5C54 20C55B    CSRD1:   JSR    CSRINS       ; DISPLAY CURSOR AT THE NEW LOCATION
+ 1337 5C57 60        CSRD2:   RTS                 ; RETURN
+ 1338
+                              .PAGE  'CONTROL CHARACTER DISPATCH TABLE'
+ 1339                ;        CONTROL CHARACTER DISPATCH TABLE FOR DTEXT
+ 1340                ;        FIRST BYTE IS ASCII CONTROL CHARACTER CODE
+ 1341                ;        AND THIRD BYTES ARE ADDRESS OF SERVICE ROUTINE
+ 1342
+ 1343 5C58 0D        CCTAB:   .BYTE  X'0D         ; CR
+ 1344 5C59 8659               .WORD  CARRET-1     ; CARRIAGE RETURN
+ 1345 5C5B 0A                 .BYTE  X'0A         ; LF
+ 1346 5C5C 9B59               .WORD  LNFED-1      ; LINE FEED
+ 1347 5C5E 08                 .BYTE  X'08         ; BS
+ 1348 5C5F 4659               .WORD  CRL-1        ; BACKSPACE
+ 1349 5C61 0C                 .BYTE  X'0C         ; FF
+ 1350 5C62 4E5A               .WORD  FMFED-1      ; FORMFEED (CLEAR SCREEN)
+ 1351 5C64 0F                 .BYTE  X'0F         ; SI
+ 1352 5C65 5859               .WORD  BASUP-1      ; BASELINE SHIFT UP
+ 1353 5C67 0E                 .BYTE  X'0E         ; SO
+ 1354 5C68 6F59               .WORD  BASDN-1      ; BASELINE SHIFT DOWN
+ 1355 5C6A 11                 .BYTE  X'11         ; DC1
+ 1356 5C6B 4659               .WORD  CRL-1        ; CURSOR LEFT
+ 1357 5C6D 12                 .BYTE  X'12         ; DC2
+ 1358 5C6E 4059               .WORD  CRR-1        ; CURSOR RIGHT
+ 1359 5C70 13                 .BYTE  X'13         ; DC3
+ 1360 5C71 4C59               .WORD  CRU-1        ; CURSOR UP
+ 1361 5C73 14                 .BYTE  X'14         ; DC4
+ 1362 5C74 5259               .WORD  CRD-1        ; CURSOR DOWN
+ 1363                CCTABE:                      ; END OF LIST
+ 1364
+                              .PAGE    'CHARACTER FONT TABLE'
+ 1365                ;        CHARACTER FONT TABLE 5 WIDE BY 7 HIGH PLUS 2 DESCENDING
+ 1366                ;        ENTRIES IN ORDER STARTING AT ASCII BLANK
+ 1367                ;        96 ENTRIES
+ 1368                ;        EACH ENTRY CONTAINS 8 BYTES
+ 1369                ;        SIGN BIT OF FIRST BYTE IS A DESCENDER FLAG, CHARACTER DESCENDS
+ 1370                ;        2 ROWS IF IT IS A ONE
+ 1371                ;        NEXT 7 BYTES ARE CHARACTER MATRIX, TOP ROW FIRST, LEFTMOST DOT
+ 1372                ;        IS LEFTMOST IN BYTE
+ 1373
+ 1374 5C76 00000000  CHTB:    .BYTE  X'00,X'00,X'00,X'00    ; BLANK
+ 1375 5C7A 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1376 5C7E 00202020           .BYTE  X'00,X'20,X'20,X'20    ; !
+ 1377 5C82 20200020           .BYTE  X'20,X'20,X'00,X'20
+ 1378 5C86 00505050           .BYTE  X'00,X'50,X'50,X'50    ; "
+ 1379 5C8A 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1380 5C8E 005050F8           .BYTE  X'00,X'50,X'50,X'F8    ; #
+ 1381 5C92 50F85050           .BYTE  X'50,X'F8,X'50,X'50
+ 1382 5C96 002078A0           .BYTE  X'00,X'20,X'78,X'A0    ; X'
+ 1383 5C9A 7028F020           .BYTE  X'70,X'28,X'F0,X'20
+ 1384 5C9E 00C8C810           .BYTE  X'00,X'C8,X'C8,X'10    ; %
+ 1385 5CA2 20409898           .BYTE  X'20,X'40,X'98,X'98
+ 1386 5CA6 0040A0A0           .BYTE  X'00,X'40,X'A0,X'A0    ; &
+ 1387 5CAA 40A89068           .BYTE  X'40,X'A8,X'90,X'68
+ 1388 5CAE 00303030           .BYTE  X'00,X'30,X'30,X'30    ; '
+ 1389 5CB2 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1390 5CB6 00204040           .BYTE  X'00,X'20,X'40,X'40    ; (
+ 1391 5CBA 40404020           .BYTE  X'40,X'40,X'40,X'20
+ 1392 5CBE 00201010           .BYTE  X'00,X'20,X'10,X'10    ; )
+ 1393 5CC2 10101020           .BYTE  X'10,X'10,X'10,X'20
+ 1394 5CC6 0020A870           .BYTE  X'00,X'20,X'A8,X'70    ; *
+ 1395 5CCA 2070A820           .BYTE  X'20,X'70,X'A8,X'20
+ 1396 5CCE 00002020           .BYTE  X'00,X'00,X'20,X'20    ; +
+ 1397 5CD2 F8202000           .BYTE  X'F8,X'20,X'20,X'00
+ 1398 5CD6 80000000           .BYTE  X'80,X'00,X'00,X'00    ; ,
+ 1399 5CDA 30301020           .BYTE  X'30,X'30,X'10,X'20
+ 1400 5CDE 00000000           .BYTE  X'00,X'00,X'00,X'00    ; -
+ 1401 5CE2 F8000000           .BYTE  X'F8,X'00,X'00,X'00
+ 1402 5CE6 00000000           .BYTE  X'00,X'00,X'00,X'00    ; .
+ 1403 5CEA 00003030           .BYTE  X'00,X'00,X'30,X'30
+ 1404 5CEE 00080810           .BYTE  X'00,X'08,X'08,X'10    ; /
+ 1405 5CF2 20408080           .BYTE  X'20,X'40,X'80,X'80
+ 1406 5CF6 00609090           .BYTE  X'00,X'60,X'90,X'90    ; 0
+ 1407 5CFA 90909060           .BYTE  X'90,X'90,X'90,X'60
+ 1408 5CFE 00206020           .BYTE  X'00,X'20,X'60,X'20    ; 1
+ 1409 5D02 20202070           .BYTE  X'20,X'20,X'20,X'70
+ 1410 5D06 00708810           .BYTE  X'00,X'70,X'88,X'10    ; 2
+ 1411 5D0A 204080F8           .BYTE  X'20,X'40,X'80,X'F8
+ 1412 5D0E 00708808           .BYTE  X'00,X'70,X'88,X'08    ; 3
+ 1413 5D12 30088870           .BYTE  X'30,X'08,X'88,X'70
+ 1414 5D16 00103050           .BYTE  X'00,X'10,X'30,X'50    ; 4
+ 1415 5D1A 90F81010           .BYTE  X'90,X'F8,X'10,X'10
+ 1416 5D1E 00F880F0           .BYTE  X'00,X'F8,X'80,X'F0    ; 5
+ 1417 5D22 080808F0           .BYTE  X'08,X'08,X'08,X'F0
+ 1418 5D26 00708080           .BYTE  X'00,X'70,X'80,X'80    ; 6
+VMSUP  K-1008 VM GRAPHIC SUP
+CHARACTER FONT TABLE
+
+ 1419 5D2A F0888870           .BYTE  X'F0,X'88,X'88,X'70
+ 1420 5D2E 00F80810           .BYTE  X'00,X'F8,X'08,X'10    ; 7
+ 1421 5D32 20408080           .BYTE  X'20,X'40,X'80,X'80
+ 1422 5D36 00708888           .BYTE  X'00,X'70,X'88,X'88    ; 8
+ 1423 5D3A 70888870           .BYTE  X'70,X'88,X'88,X'70
+ 1424 5D3E 00708888           .BYTE  X'00,X'70,X'88,X'88    ; 9
+ 1425 5D42 78080870           .BYTE  X'78,X'08,X'08,X'70
+ 1426 5D46 00303000           .BYTE  X'00,X'30,X'30,X'00    ; :
+ 1427 5D4A 00003030           .BYTE  X'00,X'00,X'30,X'30
+ 1428 5D4E 00303000           .BYTE  X'00,X'30,X'30,X'00    ; ;
+ 1429 5D52 30301020           .BYTE  X'30,X'30,X'10,X'20
+ 1430 5D56 00102040           .BYTE  X'00,X'10,X'20,X'40    ; LESS THAN
+ 1431 5D5A 80402010           .BYTE  X'80,X'40,X'20,X'10
+ 1432 5D5E 000000F8           .BYTE  X'00,X'00,X'00,X'F8    ; =
+ 1433 5D62 00F80000           .BYTE  X'00,X'F8,X'00,X'00
+ 1434 5D66 00402010           .BYTE  X'00,X'40,X'20,X'10    ; GREATER THAN
+ 1435 5D6A 08102040           .BYTE  X'08,X'10,X'20,X'40
+ 1436 5D6E 00708808           .BYTE  X'00,X'70,X'88,X'08    ; ?
+ 1437 5D72 10200020           .BYTE  X'10,X'20,X'00,X'20
+ 1438 5D76 00708808           .BYTE  X'00,X'70,X'88,X'08    ; @
+ 1439 5D7A 68A8A8D0           .BYTE  X'68,X'A8,X'A8,X'D0
+ 1440 5D7E 00205088           .BYTE  X'00,X'20,X'50,X'88    ; A
+ 1441 5D82 88F88888           .BYTE  X'88,X'F8,X'88,X'88
+ 1442 5D86 00F04848           .BYTE  X'00,X'F0,X'48,X'48    ; B
+ 1443 5D8A 704848F0           .BYTE  X'70,X'48,X'48,X'F0
+ 1444 5D8E 00708880           .BYTE  X'00,X'70,X'88,X'80    ; C
+ 1445 5D92 80808870           .BYTE  X'80,X'80,X'88,X'70
+ 1446 5D96 00F04848           .BYTE  X'00,X'F0,X'48,X'48    ; D
+ 1447 5D9A 484848F0           .BYTE  X'48,X'48,X'48,X'F0
+ 1448 5D9E 00F88080           .BYTE  X'00,X'F8,X'80,X'80    ; E
+ 1449 5DA2 F08080F8           .BYTE  X'F0,X'80,X'80,X'F8
+ 1450 5DA6 00F88080           .BYTE  X'00,X'F8,X'80,X'80    ; F
+ 1451 5DAA F0808080           .BYTE  X'F0,X'80,X'80,X'80
+ 1452 5DAE 00708880           .BYTE  X'00,X'70,X'88,X'80    ; G
+ 1453 5DB2 B8888870           .BYTE  X'B8,X'88,X'88,X'70
+ 1454 5DB6 00888888           .BYTE  X'00,X'88,X'88,X'88    ; H
+ 1455 5DBA F8888888           .BYTE  X'F8,X'88,X'88,X'88
+ 1456 5DBE 00702020           .BYTE  X'00,X'70,X'20,X'20    ; I
+ 1457 5DC2 20202070           .BYTE  X'20,X'20,X'20,X'70
+ 1458 5DC6 00381010           .BYTE  X'00,X'38,X'10,X'10    ; J
+ 1459 5DCA 10109060           .BYTE  X'10,X'10,X'90,X'60
+ 1460 5DCE 008890A0           .BYTE  X'00,X'88,X'90,X'A0    ; K
+ 1461 5DD2 C0A09088           .BYTE  X'C0,X'A0,X'90,X'88
+ 1462 5DD6 00808080           .BYTE  X'00,X'80,X'80,X'80    ; L
+ 1463 5DDA 808080F8           .BYTE  X'80,X'80,X'80,X'F8
+ 1464 5DDE 0088D8A8           .BYTE  X'00,X'88,X'D8,X'A8    ; M
+ 1465 5DE2 A8888888           .BYTE  X'A8,X'88,X'88,X'88
+ 1466 5DE6 008888C8           .BYTE  X'00,X'88,X'88,X'C8    ; N
+ 1467 5DEA A8988888           .BYTE  X'A8,X'98,X'88,X'88
+ 1468 5DEE 00708888           .BYTE  X'00,X'70,X'88,X'88    ; O
+ 1469 5DF2 88888870           .BYTE  X'88,X'88,X'88,X'70
+ 1470 5DF6 00F08888           .BYTE  X'00,X'F0,X'88,X'88    ; P
+ 1471 5DFA F0808080           .BYTE  X'F0,X'80,X'80,X'80
+ 1472 5DFE 00708888           .BYTE  X'00,X'70,X'88,X'88    ; Q
+ 1473 5E02 88A89068           .BYTE  X'88,X'A8,X'90,X'68
+VMSUP  K-1008 VM GRAPHIC SUP
+CHARACTER FONT TABLE
+
+ 1474 5E06 00F08888           .BYTE  X'00,X'F0,X'88,X'88    ; R
+ 1475 5E0A F0A09088           .BYTE  X'F0,X'A0,X'90,X'88
+ 1476 5E0E 00788080           .BYTE  X'00,X'78,X'80,X'80    ; S
+ 1477 5E12 700808F0           .BYTE  X'70,X'08,X'08,X'F0
+ 1478 5E16 00F82020           .BYTE  X'00,X'F8,X'20,X'20    ; T
+ 1479 5E1A 20202020           .BYTE  X'20,X'20,X'20,X'20
+ 1480 5E1E 00888888           .BYTE  X'00,X'88,X'88,X'88    ; U
+ 1481 5E22 88888870           .BYTE  X'88,X'88,X'88,X'70
+ 1482 5E26 00888888           .BYTE  X'00,X'88,X'88,X'88    ; V
+ 1483 5E2A 50502020           .BYTE  X'50,X'50,X'20,X'20
+ 1484 5E2E 00888888           .BYTE  X'00,X'88,X'88,X'88    ; W
+ 1485 5E32 A8A8D888           .BYTE  X'A8,X'A8,X'D8,X'88
+ 1486 5E36 00888850           .BYTE  X'00,X'88,X'88,X'50    ; X
+ 1487 5E3A 20508888           .BYTE  X'20,X'50,X'88,X'88
+ 1488 5E3E 00888850           .BYTE  X'00,X'88,X'88,X'50    ; Y
+ 1489 5E42 20202020           .BYTE  X'20,X'20,X'20,X'20
+ 1490 5E46 00F80810           .BYTE  X'00,X'F8,X'08,X'10    ; Z
+ 1491 5E4A 204080F8           .BYTE  X'20,X'40,X'80,X'F8
+ 1492 5E4E 00704040           .BYTE  X'00,X'70,X'40,X'40    ; LEFT BRACKET
+ 1493 5E52 40404070           .BYTE  X'40,X'40,X'40,X'70
+ 1494 5E56 00808040           .BYTE  X'00,X'80,X'80,X'40    ; BACKSLASH
+ 1495 5E5A 20100808           .BYTE  X'20,X'10,X'08,X'08
+ 1496 5E5E 00701010           .BYTE  X'00,X'70,X'10,X'10    ; RIGHT BRACKET
+ 1497 5E62 10101070           .BYTE  X'10,X'10,X'10,X'70
+ 1498 5E66 00205088           .BYTE  X'00,X'20,X'50,X'88    ; CARROT
+ 1499 5E6A 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1500 5E6E 00000000           .BYTE  X'00,X'00,X'00,X'00    ; UNDERLINE
+ 1501 5E72 000000F8           .BYTE  X'00,X'00,X'00,X'F8
+ 1502
+ 1503 5E76 00C06030           .BYTE  X'00,X'C0,X'60,X'30    ; GRAVE ACCENT
+ 1504 5E7A 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1505 5E7E 00006010           .BYTE  X'00,X'00,X'60,X'10    ; A (LC)
+ 1506 5E82 70909068           .BYTE  X'70,X'90,X'90,X'68
+ 1507 5E86 008080F0           .BYTE  X'00,X'80,X'80,X'F0    ; B (LC)
+ 1508 5E8A 888888F0           .BYTE  X'88,X'88,X'88,X'F0
+ 1509 5E8E 00000078           .BYTE  X'00,X'00,X'00,X'78    ; C (LC)
+ 1510 5E92 80808078           .BYTE  X'80,X'80,X'80,X'78
+ 1511 5E96 00080878           .BYTE  X'00,X'08,X'08,X'78    ; D (LC)
+ 1512 5E9A 88888878           .BYTE  X'88,X'88,X'88,X'78
+ 1513 5E9E 00000070           .BYTE  X'00,X'00,X'00,X'70    ; E (LC)
+ 1514 5EA2 88F08078           .BYTE  X'88,X'F0,X'80,X'78
+ 1515 5EA6 00304040           .BYTE  X'00,X'30,X'40,X'40    ; F (LC)
+ 1516 5EAA E0404040           .BYTE  X'E0,X'40,X'40,X'40
+ 1517 5EAE 80708888           .BYTE  X'80,X'70,X'88,X'88    ; G (LC)
+ 1518 5EB2 98680870           .BYTE  X'98,X'68,X'08,X'70
+ 1519 5EB6 008080B0           .BYTE  X'00,X'80,X'80,X'B0    ; H (LC)
+ 1520 5EBA C8888888           .BYTE  X'C8,X'88,X'88,X'88
+ 1521 5EBE 00200060           .BYTE  X'00,X'20,X'00,X'60    ; I (LC)
+ 1522 5EC2 20202070           .BYTE  X'20,X'20,X'20,X'70
+ 1523 5EC6 80701010           .BYTE  X'80,X'70,X'10,X'10    ; J (LC)
+ 1524 5ECA 10109060           .BYTE  X'10,X'10,X'90,X'60
+ 1525 5ECE 00808090           .BYTE  X'00,X'80,X'80,X'90    ; K (LC)
+ 1526 5ED2 A0C0A090           .BYTE  X'A0,X'C0,X'A0,X'90
+ 1527 5ED6 00602020           .BYTE  X'00,X'60,X'20,X'20    ; L (LC)
+ 1528 5EDA 20202020           .BYTE  X'20,X'20,X'20,X'20
+VMSUP  K-1008 VM GRAPHIC SUP
+CHARACTER FONT TABLE
+
+ 1529 5EDE 000000D0           .BYTE  X'00,X'00,X'00,X'D0    ; M (LC)
+ 1530 5EE2 A8A8A8A8           .BYTE  X'A8,X'A8,X'A8,X'A8
+ 1531 5EE6 000000B0           .BYTE  X'00,X'00,X'00,X'B0    ; N (LC)
+ 1532 5EEA C8888888           .BYTE  X'C8,X'88,X'88,X'88
+ 1533 5EEE 00000070           .BYTE  X'00,X'00,X'00,X'70    ; O (LC)
+ 1534 5EF2 88888870           .BYTE  X'88,X'88,X'88,X'70
+ 1535 5EF6 80F08888           .BYTE  X'80,X'F0,X'88,X'88    ; P (LC)
+ 1536 5EFA 88F08080           .BYTE  X'88,X'F0,X'80,X'80
+ 1537 5EFE 80788888           .BYTE  X'80,X'78,X'88,X'88    ; Q (LC)
+ 1538 5F02 88780808           .BYTE  X'88,X'78,X'08,X'08
+ 1539 5F06 000000B0           .BYTE  X'00,X'00,X'00,X'B0    ; R (LC)
+ 1540 5F0A C8808080           .BYTE  X'C8,X'80,X'80,X'80
+ 1541 5F0E 00000078           .BYTE  X'00,X'00,X'00,X'78    ; S (LC)
+ 1542 5F12 807008F0           .BYTE  X'80,X'70,X'08,X'F0
+ 1543 5F16 004040E0           .BYTE  X'00,X'40,X'40,X'E0    ; T (LC)
+ 1544 5F1A 40405020           .BYTE  X'40,X'40,X'50,X'20
+ 1545 5F1E 00000090           .BYTE  X'00,X'00,X'00,X'90    ; U (LC)
+ 1546 5F22 90909068           .BYTE  X'90,X'90,X'90,X'68
+ 1547 5F26 00000088           .BYTE  X'00,X'00,X'00,X'88    ; V (LC)
+ 1548 5F2A 88505020           .BYTE  X'88,X'50,X'50,X'20
+ 1549 5F2E 000000A8           .BYTE  X'00,X'00,X'00,X'A8    ; W (LC)
+ 1550 5F32 A8A8A850           .BYTE  X'A8,X'A8,X'A8,X'50
+ 1551 5F36 00000088           .BYTE  X'00,X'00,X'00,X'88    ; X (LC)
+ 1552 5F3A 50205088           .BYTE  X'50,X'20,X'50,X'88
+ 1553 5F3E 80888888           .BYTE  X'80,X'88,X'88,X'88    ; Y (LC)
+ 1554 5F42 50204080           .BYTE  X'50,X'20,X'40,X'80
+ 1555 5F46 000000F8           .BYTE  X'00,X'00,X'00,X'F8    ; Z (LC)
+ 1556 5F4A 102040F8           .BYTE  X'10,X'20,X'40,X'F8
+ 1557 5F4E 00102020           .BYTE  X'00,X'10,X'20,X'20    ; LEFT BRACE
+ 1558 5F52 60202010           .BYTE  X'60,X'20,X'20,X'10
+ 1559 5F56 00202020           .BYTE  X'00,X'20,X'20,X'20    ; VERTICAL BAR
+ 1560 5F5A 20202020           .BYTE  X'20,X'20,X'20,X'20
+ 1561 5F5E 00402020           .BYTE  X'00,X'40,X'20,X'20    ; RIGHT BRACE
+ 1562 5F62 30202040           .BYTE  X'30,X'20,X'20,X'40
+ 1563 5F66 0010A840           .BYTE  X'00,X'10,X'A8,X'40    ; TILDA
+ 1564 5F6A 00000000           .BYTE  X'00,X'00,X'00,X'00
+ 1565 5F6E 00A850A8           .BYTE  X'00,X'A8,X'50,X'A8    ; RUBOUT
+ 1566 5F72 50A850A8           .BYTE  X'50,X'A8,X'50,X'A8
+ 1567
+ 1568 0000                    .END
+NO ERROR LINES
