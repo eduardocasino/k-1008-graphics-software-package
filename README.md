@@ -2,11 +2,7 @@
 
 ## Introduction
 
-This repository contains the sources, in their original assembly format, listings and assembled programs that came with MTU's Graphics Software Package for the K-1008 "Visable" memory card for the KIM-1.
-
-Please refer to the [original documentation](http://retro.hansotten.nl/6502-sbc/kim-1-manuals-and-software/kim-1-related-hardware/mtu-k-1012-k-1008/mtu-k-1008/) for usage information.
-
-(This is a Work In Progress, currently just the SWIRL and VMLIF programs are completed)
+This repository contains the manual facsimile, the sources in their original assembly format, listings and assembled programs that came with MTU's Graphics Software Package for the K-1008 "Visable" memory card for the KIM-1.
 
 ## Licensing
 
