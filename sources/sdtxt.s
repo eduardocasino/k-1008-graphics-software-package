@@ -122,13 +122,13 @@ SDTX3:   JMP    SDTXRT       ; GO INSERT CURSOR, RESTORE REGISTERS,
 
 ;        INTERPRET CONTROL CODES
 
-SDTX10:  CMP    X'0D-X'20    ; TEST IF CR
+SDTX10:  CMP    #X'0D-X'20   ; TEST IF CR
          BEQ    SDTXCR       ; JUMP IF SO
-         CMP    X'0A-X'20    ; TEST IF LF
+         CMP    #X'0A-X'20   ; TEST IF LF
          BEQ    SDTXLF       ; JUMP IF SO
-         CMP    X'08-X'20    ; TEST IF BS
+         CMP    #X'08-X'20   ; TEST IF BS
          BEQ    SDTXCL       ; JUMP IF SO
-         CMP    X'0C-X'20    ; TEST IF FF
+         CMP    #X'0C-X'20   ; TEST IF FF
          BEQ    SDTXFF       ; JUMP IF SO
          JMP    SDTXRT       ; GO RETURN IF UNRECOGNIZABLE CONTROL
 
@@ -518,7 +518,7 @@ CHTB:    .BYTE       X'00,X'00,X'00    ; BLANK
          .BYTE  X'F0,X'A0,X'90,X'88
          .BYTE       X'78,X'80,X'80    ; S
          .BYTE  X'70,X'08,X'08,X'F0
-         .BYTE       X'F9,X'20,X'20    ; T
+         .BYTE       X'F8,X'20,X'20    ; T
          .BYTE  X'20,X'20,X'20,X'20
          .BYTE       X'88,X'88,X'88    ; U
          .BYTE  X'88,X'88,X'88,X'70

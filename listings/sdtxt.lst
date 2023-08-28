@@ -122,13 +122,13 @@
   122 5B62
   123 5B62           ;        INTERPRET CONTROL CODES
   124 5B62
-  125 5B62 C9ED      SDTX10:  CMP    X'0D-X'20    ; TEST IF CR
+  125 5B62 C9ED      SDTX10:  CMP    #X'0D-X'20   ; TEST IF CR
   126 5B64 F00F               BEQ    SDTXCR       ; JUMP IF SO
-  127 5B66 C9EA               CMP    X'0A-X'20    ; TEST IF LF
+  127 5B66 C9EA               CMP    #X'0A-X'20   ; TEST IF LF
   128 5B68 F047               BEQ    SDTXLF       ; JUMP IF SO
-  129 5B6A C9E8               CMP    X'08-X'20    ; TEST IF BS
+  129 5B6A C9E8               CMP    #X'08-X'20   ; TEST IF BS
   130 5B6C F012               BEQ    SDTXCL       ; JUMP IF SO
-  131 5B6E C9EC               CMP    X'0C-X'20    ; TEST IF FF
+  131 5B6E C9EC               CMP    #X'0C-X'20   ; TEST IF FF
   132 5B70 F01E               BEQ    SDTXFF       ; JUMP IF SO
   133 5B72 4CF85B             JMP    SDTXRT       ; GO RETURN IF UNRECOGNIZABLE CONTROL
   134 5B75
@@ -518,7 +518,7 @@
   516 5E82 F0A09088           .BYTE  X'F0,X'A0,X'90,X'88
   517 5E86 788080             .BYTE       X'78,X'80,X'80    ; S
   518 5E89 700808F0           .BYTE  X'70,X'08,X'08,X'F0
-  519 5E8D F92020             .BYTE       X'F9,X'20,X'20    ; T
+  519 5E8D F82020             .BYTE       X'F8,X'20,X'20    ; T
   520 5E90 20202020           .BYTE  X'20,X'20,X'20,X'20
   521 5E94 888888             .BYTE       X'88,X'88,X'88    ; U
   522 5E97 88888870           .BYTE  X'88,X'88,X'88,X'70
