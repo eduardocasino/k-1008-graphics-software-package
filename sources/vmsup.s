@@ -54,9 +54,6 @@ NY       =      200          ; NUMBER OF ROWS  (CHANGE FOR HALF SCREEN
                              ; OPERATION)
 NPIX     =      NX*NY        ; NUMBER OF PIXELS
 CHHIW    =      11           ; HEIGHT OF CHARACTER WINDOW
-HIC SUP
-S, STORAGE
-
 CHWIDW   =      6            ; WIDTH OF CHARACTER WINDOW
 CHHIM    =      9            ; HEIGHT OF CHARACTER MATRIX
 CHWIDM   =      5            ; WIDTH OF CHARACTER MATRIX
@@ -182,9 +179,6 @@ PIXADR:  LDA    X1CORD       ; COMPUTE BIT ADDRESS FIRST
          ADC    ADP1
          STA    ADP1
          LDA    ADP2+1
-HIC SUP
- ADDRESS OF A PIXEL
-
          ADC    ADP1+1
          ADC    VMORG        ; ADD IN VMORG*256
          STA    ADP1+1       ; FINAL RESULT
@@ -244,9 +238,6 @@ FLPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
          PLA                 ; RESTORE Y
          TAY
          RTS                 ; AND RETURN
-
-HIC SUP
-OUTINES
 
 ;        WRPIX - SETS THE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE STATE
 ;        OF BIT 0 (RIGHTMOST) OF A
@@ -352,9 +343,6 @@ CK2:     LDA    X1CORD,X     ; SUBTRACT THE LIMIT
          SBC    LIMTAB+1,Y
          STA    X1CORD+1,X
          JMP    CK           ; AND THEN GO CHECK RANGE AGAIN
-HIC SUP
-INES
-
 CK3:     LDA    X1CORD,X     ; CHECK LOWER BYTE OF X
          CMP    LIMTAB,Y
          BCS    CK2          ; GO ADJUST IF TOO LARGE
@@ -419,9 +407,6 @@ DRAW2:   LDA    #0           ; FIRST ZERO YDIR
          DEC    YDIR         ; SET YDIR TO -1
          SEC                 ; NEGATE DELTAX
          LDA    #0
-HIC SUP
-
-
          SBC    DELTAY
          STA    DELTAY
          LDA    #0
@@ -477,9 +462,6 @@ DRAW5:   LDA    Y1CORD       ; TEST FOR Y1CORD=Y2CORD
          CMP    Y2CORD+1
          BNE    DRAW7        ; GO FOR ANOTHER ITERATION IF NOT
 DRAW6:   PLA                 ; RESTORE INDEX REGISTERS
-HIC SUP
-
-
          TAY
          PLA
          TAX
@@ -535,9 +517,6 @@ BMPX:    LDA    XDIR         ; BUMP X1CORD BY +1 OR -1 ACCORDING
          BNE    BMPX2        ; XDIR
          INC    X1CORD       ; DOUBLE INCREMENT X1CORD IF XDIR=0
          BNE    BMPX1
-HIC SUP
-
-
          INC    X1CORD+1
 BMPX1:   RTS
 BMPX2:   LDA    X1CORD       ; DOUBLE DECREMENT X1CORD IF XDIR<>0
@@ -613,9 +592,6 @@ DCHAR:   PHA                 ; SAVE REGISTERS
 
 ;        CLEAR THE FIRST TWO SCAN LINES OF DESCENDING CHARACTERS
 ;        FOR LOWER CASE "J", PUT IN THE DOT AS A SPECIAL CASE
-
-HIC SUP
-TER
 
          LDA    (ADP2),Y     ; GET THE FIRST ROW FROM THE TABLE
          BEQ    DCHAR3       ; SKIP AHEAD IF NOT A DESCENDING CHARACTER
@@ -714,9 +690,6 @@ MERGER:  PHA                 ; SAVE REGISTERS
          LDX    BTPT
          LDA    (ADP1),Y     ; GET MEMORY BYTE
          AND    MERGTR,X     ; CLEAR THE BITS
-HIC SUP
-S
-
          TSX                 ; DO THE MERGING
          ORA    X'103,X
          STA    (ADP1),Y
@@ -771,9 +744,6 @@ MERGE3:  ASLA
 MERGTL:  .BYTE  X'00,X'80,X'C0,X'E0  ; MASKS FOR MERGE LEFT
          .BYTE  X'F0,X'F8,X'FC,X'FE  ; CLEAR ALL BITS TO THE RIGHT OF
          .BYTE  X'FF                 ; AND INCLUDING BIT N (0=MSB)
-
-HIC SUP
-S
 
 MERGTR:  .BYTE  X'7F,X'3F,X'1F,X'0F  ; MASKS FOR MERGE RIGHT
          .BYTE  X'07,X'03,X'01,X'00  ; CLEAR ALL BITS TO THE LEFT OF
@@ -839,9 +809,6 @@ MERGT5:  .BYTE  X'07,X'83,X'C1,X'E0  ; TABLE OF MASKS FOR OPENING UP
 ;        CHARACTER PROCESSOR.  FOR SCROLLING TO FUNCTION PROPERLY, AT
 ;        LEAST TWO LINES OF CHARACTERS MUST FIT BETWEEN THE TOP AND
 ;        BOTTOM MARGINS AND SUPERSCRIPTS AND SUBSCRIPTS SHOULD BE
-HIC SUP
- TEXT DISPLAY ROUTINE
-
 ;        AVOIDED UNLESS CHHIW IS REDEFINED TO PROVIDE ENOUGH WINDOW
 ;        AREA TO HOLD THE SHIFTED CHARACTERS WITHOUT OVERLAP WITH
 ;        ADJECANT LINES.
@@ -897,8 +864,6 @@ DTEXTR:  PLA                 ; RESTORE THE REGISTERS
          RTS                 ; AND RETURN
 
 DTEXT1:  LDX    #0           ; SET UP A LOOP TO SEARCH THE CONTROL
-HIC SUP
- TEXT DISPLAY ROUTINE
 
 DTEXT2:  CMP    CCTAB,X      ; CHARACTER TABLE FOR A MATCH
          BEQ    DTEXT3       ; JUMP IF A MATCH
@@ -970,9 +935,6 @@ BASDN1:  JSR    CSRINS       ; DISPLAY CURSOR AT NEW LOCATION
          JMP    DTEXTR       ; GO RETURN
 
 ;        CARRET - CARRIAGE RETURN
-HIC SUP
-CONTROL CHARACTERS
-
 
 CARRET:  JSR    CSRDEL       ; DELETE CURRENT CURSOR
          LDA    LMAR         ; SET X1CORD TO THE LEFT MARGIN
@@ -1028,9 +990,6 @@ LNFED5:  INC    ADP1         ; TEST IF EQUAL TO CURRENT TOP RIGHT BYTE
          BEQ    LNFED7       ; GO TO RIGHT PARTIAL BYTE PROCESSING IF =
 LNFED6:  LDA    (ADP2),Y     ; MOVE A BYTE
          STA    (ADP1),Y
-HIC SUP
-CONTROL CHARACTERS
-
          JMP    LNFED3       ; GO PROCESS NEXT BYTE
 
 ;        MOVE RIGHT PARTIAL BYTE
@@ -1086,9 +1045,6 @@ LNFEDB:  JSR    LNCLR        ; DO THE CLEARING
 ;        COORDINATES.
 
 FMFED:   JSR    RECTP        ; PROCESS MARGIN DATA INTO CORNER
-HIC SUP
-CONTROL CHARACTERS
-
                              ; BYTE AND BIT ADDRESSES
          JSR    LNCLR        ; CLEAR THE AREA DEFINED BY THE CORNERS
          LDA    LMAR         ; POSITION CURSOR AT TOP AND LEFT MARGINS
@@ -1157,9 +1113,6 @@ LNCLR5:  LDA    TLBYT        ; ADD NX/8 TO TOP LEFT BYTE ADDRESS
          STA    TLBYT
          BCC    LNCLR6
          INC    TLBYT+1
-HIC SUP
-L SUBROUTINES
-
 LNCLR6:  LDA    TRBYT        ; ADD NX/8 TO TOP RIGHT BYTE ADDRESS
          CLC
          ADC    #NX/8
@@ -1215,9 +1168,6 @@ RECTP:   LDA    X1CORD       ; SAVE CURRENT CURSOR POSITION IN
          STA    TLBYT+1
          LDA    BTPT
          STA    TLBIT
-HIC SUP
-L SUBROUTINES
-
          LDA    RMAR         ; ESTABLISH BYTE AND BIT ADDRESSES OF TOP
          STA    X1CORD       ; RIGHT CORNER
          LDA    RMAR+1
@@ -1295,9 +1245,6 @@ RTTST:   LDA    RMAR         ; COMPUTE RMAR-X1CORD-(2*CHWIDW-2)
          TAX                 ; - NOT OK
          LDA    RMAR+1       ; Z OK
          SBC    X1CORD+1     ; + OK
-HIC SUP
-EST ROUTINES
-
          PHA
          TXA
          SEC
@@ -1361,9 +1308,6 @@ CSRR2:   RTS                 ; RETURN
 CSRL:    JSR    LFTST        ; TEST IF CURSOR IS TOO FAR LEFT
          BMI    CSRL2        ; JUMP IF IT IS TOO FAR LEFT
          JSR    CSRDEL       ; DELETE THE PRESENT CURSOR
-HIC SUP
-OUTINES
-
          LDA    X1CORD       ; SUBTRACT CHARACTER WINDOW WIDTH FROM
          SEC                 ; X COORDINATE
          SBC    #CHWIDW
@@ -1487,9 +1431,6 @@ CHTB:    .BYTE  X'00,X'00,X'00,X'00    ; BLANK
          .BYTE  X'00,X'F8,X'80,X'F0    ; 5
          .BYTE  X'08,X'08,X'08,X'F0
          .BYTE  X'00,X'70,X'80,X'80    ; 6
-HIC SUP
-
-
          .BYTE  X'F0,X'88,X'88,X'70
          .BYTE  X'00,X'F8,X'08,X'10    ; 7
          .BYTE  X'20,X'40,X'80,X'80
@@ -1545,9 +1486,6 @@ HIC SUP
          .BYTE  X'F0,X'80,X'80,X'80
          .BYTE  X'00,X'70,X'88,X'88    ; Q
          .BYTE  X'88,X'A8,X'90,X'68
-HIC SUP
-
-
          .BYTE  X'00,X'F0,X'88,X'88    ; R
          .BYTE  X'F0,X'A0,X'90,X'88
          .BYTE  X'00,X'78,X'80,X'80    ; S
@@ -1603,9 +1541,6 @@ HIC SUP
          .BYTE  X'A0,X'C0,X'A0,X'90
          .BYTE  X'00,X'60,X'20,X'20    ; L (LC)
          .BYTE  X'20,X'20,X'20,X'20
-HIC SUP
-
-
          .BYTE  X'00,X'00,X'00,X'D0    ; M (LC)
          .BYTE  X'A8,X'A8,X'A8,X'A8
          .BYTE  X'00,X'00,X'00,X'B0    ; N (LC)
