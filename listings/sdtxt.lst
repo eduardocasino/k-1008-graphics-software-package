@@ -54,13 +54,13 @@
    54 5B00           BTPT:    .=.+   1            ; BIT NUMBER TEMPORARY STORAGE
    55 5B01           DCNT1:   .=.+   2            ; DOUBLE PRECISION COUNTER
    56 5B03           MRGT1:   .=.+   1            ; TEMPORARY STORAGE FOR MERGE
-   57 5B04
-   58 5B04           ;        PERMANENT RAM STORAGE
-   59 5B04
+   57
+   58                ;        PERMANENT RAM STORAGE
+   59
    60 5B04           CSRX:    .=.+   1            ; CURRENT CHARACTER NUMBER (0=LEFT CHAR)
    61 5B05           CSRY:    .=.+   1            ; CURRENT LINE NUMBER (0=TOP LINE)
    62 5B06           VMORG:   .=.+   1            ; FIRST PAGE NUMBER OF VISIBLE MEMORY
-   63 5B07
+   63
    64 5B07 48        SDTXT:   PHA                 ; SAVE REGISTERS
    65 5B08 8A                 TXA
    66 5B09 48                 PHA
@@ -74,9 +74,9 @@
    74 5B16 38                 SEC
    75 5B17 E920               SBC    #X'20        ; TEST IF A CONTROL CHARACTER
    76 5B19 3047               BMI    SDTX10       ; JUMP IF SO
-   77 5B1B
-   78 5B1B           ;        CALCULATE TABLE ADDRESS FOR CHAR SHAPE AND PUT IT INTO ADPL
-   79 5B1B
+   77
+   78                ;        CALCULATE TABLE ADDRESS FOR CHAR SHAPE AND PUT IT INTO ADPL
+   79
    80 5B1B 85EC      SDTXT1:  STA    ADP2         ; SAVE CHARACTER CODE IN ADP2
    81 5B1D 20225C             JSR    SADP2L       ; COMPUTE 8*CHARACTER CODE IN ADP2
    82 5B20 20225C             JSR    SADP2L
@@ -95,20 +95,20 @@
    95 5B3A A5EB               LDA    ADP1+1
    96 5B3C 695D               ADC    #CHTB/256
    97 5B3E 85EB               STA    ADP1+1       ; ADP1 NOW HAS ADDRESS OF TOP ROW OF
-   98 5B40                                        ; CHARACTER SHAPE
-   99 5B40           ;        COMPUTE BYTE AND BIT ADDRESS OF FIRST SCAN LINE OF
-  100 5B40           ;        CHARACTER AT CURSOR POSITION
-  101 5B40
+   98                                             ; CHARACTER SHAPE
+   99                ;        COMPUTE BYTE AND BIT ADDRESS OF FIRST SCAN LINE OF
+  100                ;        CHARACTER AT CURSOR POSITION
+  101
   102 5B40 20355C             JSR    CSRTAD       ; COMPUTE BYTE AND BIT ADDRESSES OF FIRST
-  103 5B43                                        ; SCAN LINE OF CHARACTER AT CURSOR POS.
-  104 5B43
+  103                                             ; SCAN LINE OF CHARACTER AT CURSOR POS.
+  104
   105 5B43           ;        SCAN OUT THE 7 CHARACTER ROWS
-  106 5B43
+  106
   107 5B43 A000               LDY    #0           ; INITIALIZE Y INDEX=FONT TABLE POINTER
   108 5B45 B1EA      SDTX2:   LDA    (ADP1),Y     ; GET A DOT ROW FROM THE FONT TABLE
   109 5B47 20805C             JSR    MERGE        ; MERGE IT WITH GRAPHIC MEMORY AT (ADP2)
   110 5B4A 20275C             JSR    DN1SCN       ; ADD 40 TO ADP2 TO MOVE DOWN ONE SCAN
-  111 5B4D                                        ; LINE IN GRAPHIC MEMORY
+  111                                             ; LINE IN GRAPHIC MEMORY
   112 5B4D C8                 INY                 ; BUMP UP POINTER INTO FONT TABLE
   113 5B4E C007               CPY    #7           ; TEST IF DONE
   114 5B50 D0F3               BNE    SDTX2        ; GO DO NEXT SCAN LINE IF NOT
@@ -118,10 +118,10 @@
   118 5B59 201A5C             JSR    CSRCLR       ; CLEAR OLD CURSOR
   119 5B5C EE045B             INC    CSRX         ; MOVE CURSOR ONE POSITION RIGHT
   120 5B5F 4CF85B    SDTX3:   JMP    SDTXRT       ; GO INSERT CURSOR, RESTORE REGISTERS,
-  121 5B62                                        ; AND RETURN
-  122 5B62
-  123 5B62           ;        INTERPRET CONTROL CODES
-  124 5B62
+  121                                             ; AND RETURN
+  122
+  123                ;        INTERPRET CONTROL CODES
+  124
   125 5B62 C9ED      SDTX10:  CMP    #X'0D-X'20   ; TEST IF CR
   126 5B64 F00F               BEQ    SDTXCR       ; JUMP IF SO
   127 5B66 C9EA               CMP    #X'0A-X'20   ; TEST IF LF
@@ -131,19 +131,19 @@
   131 5B6E C9EC               CMP    #X'0C-X'20   ; TEST IF FF
   132 5B70 F01E               BEQ    SDTXFF       ; JUMP IF SO
   133 5B72 4CF85B             JMP    SDTXRT       ; GO RETURN IF UNRECOGNIZABLE CONTROL
-  134 5B75
+  134
   135 5B75 201A5C    SDTXCR:  JSR    CSRCLR       ; CARRIAGE RETURN, FIRST CLEAR CURSOR
   136 5B78 A900               LDA    #0           ; ZERO CURSOR HORIZONTAL POSITION
   137 5B7A 8D045B             STA    CSRX
   138 5B7D 4CF85B             JMP    SDTXRT       ; GO SET CURSOR AND RETURN
-  139 5B80
+  139
   140 5B80 201A5C    SDTXCL:  JSR    CSRCLR       ; CURSOR LEFT, FIRST CLEAR CURSOR
   141 5B83 AD045B             LDA    CSRX         ; GET CURSOR HORIZONTAL POSITION
   142 5B86 C900               CMP    #0           ; TEST IF AGAINST LEFT EDGE
   143 5B88 F003               BEQ    SDTX20       ; SKIP UPDATE IF SO
   144 5B8A CE045B             DEC    CSRX         ; OTHERWISE DECREMENT CURSOR X POSITION
   145 5B8D 4CF85B    SDTX20:  JMP    SDTXRT       ; GO SET CURSOR AND RETURN
-  146 5B90
+  146
   147 5B90 AD065B    SDTXFF:  LDA    VMORG        ; FORM FEED, CLEAR SCREEN TO ZEROES
   148 5B93 85ED               STA    ADP2+1       ; TRANSFER VISIBLE MEMORY ORIGIN ADDRESS
   149 5B95 A900               LDA    #0           ; TO ADP2
@@ -157,7 +157,7 @@
   157 5BA8 8D045B             STA    CSRX         ; PUT CURSOR IN UPPER LEFT CORNER
   158 5BAB 8D055B             STA    CSRY
   159 5BAE 4CF85B             JMP    SDTXRT       ; GO SET CURSOR AND RETURN
-  160 5BB1
+  160
   161 5BB1 201A5C    SDTXLF:  JSR    CSRCLR       ; LINE FEED, FIRST CLEAR CURSOR
   162 5BB4 AD055B             LDA    CSRY         ; GET CURRENT LINE POSITION
   163 5BB7 C915               CMP    #NLIN-1      ; TEST IF AY BOTTOM OF SCREEN
@@ -178,9 +178,9 @@
   178 5BD7 A91D               LDA    #NSCRL/256   ; HIGH PART
   179 5BD9 8D025B             STA    DCNT1+1
   180 5BDC 20D35C             JSR    FMOVE        ; EXECUTE MOVE USING AN OPTIMIZED, HIGH
-  181 5BDF                                        ; SPEED MEMORY MOVE ROUTINE
-  182 5BDF
-  183 5BDF                                        ; CLEAR LAST LINE OF TEXT
+  181                                             ; SPEED MEMORY MOVE ROUTINE
+  182
+  183                                             ; CLEAR LAST LINE OF TEXT
   184 5BDF A988               LDA    #NLIN-1*CHHI*40&X'FF  ; SET ADDRESS POINTER
   185 5BE1 85EC               STA    ADP2         ; LOW BYTE
   186 5BE3 A91D               LDA    #NLIN-1*CHHI*40/256
@@ -192,9 +192,9 @@
   192 5BF0 A901               LDA    #NCLR/256    ; SET HIGH BYTE OF CLEAR COUNT
   193 5BF2 8D025B             STA    DCNT1+1
   194 5BF5 20015D             JSR    FCLR         ; CLEAR THE DESIGNATED AREA
-  195 5BF8
-  196 5BF8           ;        NO EFFECTIVE CHANGE IN CURSOR POSITION
-  197 5BF8
+  195
+  196                ;        NO EFFECTIVE CHANGE IN CURSOR POSITION
+  197
   198 5BF8 20125C    SDTXRT:  JSR    CSRSET       ; RETURN SEQUENCE, INSERT CURSOR
   199 5BFB 68                 PLA                 ; RESTORE REGISTERS FROM THE STACK
   200 5BFC A8                 TAY
@@ -202,16 +202,16 @@
   202 5BFE AA                 TAX
   203 5BFF 68                 PLA
   204 5C00 60                 RTS                 ; RETURN
-  205 5C01
+  205
                               .PAGE  'SUBROUTINES FOR SDTXT'
-  206 5C01           ;        COMPUTE ADDRESS OF BYTE CONTAINING LAST SCAN LINE OF
-  207 5C01           ;        CHARACTER AT CURSOR POSITION
-  208 5C01           ;        ADDRESS = CSRTAD+(CHHI-1)*40   SINCE CHHI IS A CONSTANT 9,
-  209 5C01           ;        (CHHI-1)*40=320
-  210 5C01           ;        BTPT HOLDS BIT ADDRESS, 0=LEFTMOST
-  211 5C01
+  206                ;        COMPUTE ADDRESS OF BYTE CONTAINING LAST SCAN LINE OF
+  207                ;        CHARACTER AT CURSOR POSITION
+  208                ;        ADDRESS = CSRTAD+(CHHI-1)*40   SINCE CHHI IS A CONSTANT 9,
+  209                ;        (CHHI-1)*40=320
+  210                ;        BTPT HOLDS BIT ADDRESS, 0=LEFTMOST
+  211
   212 5C01 20355C    CSRBAD:  JSR    CSRTAD       ; COMPUTE ADDRESS OF TOP OF CHARACTER CELL
-  213 5C04                                        ; FIRST
+  213                                             ; FIRST
   214 5C04 A5EC               LDA    ADP2         ; ADD 320 TO RESULT = 8 SCAN LINES
   215 5C06 18                 CLC
   216 5C07 6940               ADC    #320&X'FF
@@ -220,29 +220,29 @@
   219 5C0D 6901               ADC    #320/256
   220 5C0F 85ED               STA    ADP2+1
   221 5C11 60                 RTS
-  222 5C12
-  223 5C12           ;        SET CURSOR AT CURRENT POSITION
-  224 5C12
+  222
+  223                ;        SET CURSOR AT CURRENT POSITION
+  224
   225 5C12 20015C    CSRSET:  JSR    CSRBAD       ; GET BYTE AND BIT ADDRESS OF CURSOR
   226 5C15 A9F8               LDA    #X'F8        ; DATA = UNDERLINE CURSOR
   227 5C17 4C805C    CSRST1:  JMP    MERGE        ; MERGE CURSOR WITH GRAPHIC MEMORY
-  228 5C1A                                        ; AND RETURN
-  229 5C1A
-  230 5C1A           ;        CLEAR CURSOR AT CURRENT POSITION
-  231 5C1A
+  228                                             ; AND RETURN
+  229
+  230                ;        CLEAR CURSOR AT CURRENT POSITION
+  231
   232 5C1A 20015C    CSRCLR:  JSR    CSRBAD       ; GET BYTE AND BIT ADDRESS OF CURSOR
   233 5C1D A900               LDA    #0           ; DATA = BLANK DOT ROW
   234 5C1F 4C805C             JMP    MERGE        ; REMOVE DOT ROW FROM GRAPHIC MEMORY
-  235 5C22                                        ; AND RETURN
-  236 5C22
-  237 5C22           ;        SHIFT ADP2 LEFT ONE BIT POSITION
-  238 5C22
+  235                                             ; AND RETURN
+  236
+  237                ;        SHIFT ADP2 LEFT ONE BIT POSITION
+  238
   239 5C22 06EC      SADP2L:  ASL    ADP2
   240 5C24 26ED               ROL    ADP2+1
   241 5C26 60                 RTS
-  242 5C27
-  243 5C27           ;        MOVE DOWN ONE SCAN LINE      DOUBLE ADDS 40 TO ADP2
-  244 5C27
+  242
+  243                ;        MOVE DOWN ONE SCAN LINE      DOUBLE ADDS 40 TO ADP2
+  244
   245 5C27 A5EC      DN1SCN:  LDA    ADP2         ; ADD 40 TO LOW BYTE
   246 5C29 18                 CLC
   247 5C2A 6928               ADC    #40
@@ -251,14 +251,14 @@
   250 5C30 65ED               ADC    ADP2+1
   251 5C32 85ED               STA    ADP2+1
   252 5C34 60                 RTS                 ; RETURN
-  253 5C35
-  254 5C35           ;        COMPUTE BYTE ADDRESS CONTAINING FIRST SCAN LINE OF
-  255 5C35           ;        CHARACTER AT CURSOR POSITION AND PUT IN ADP2
-  256 5C35           ;        BIT ADDRESS (BIT 0 IS LEFTMOST) AT BTPT
-  257 5C35           ;        BYTE ADDRESS =VMORG*256+CHHI*40*CSRY+INT(CSRX*6/8)
-  258 5C35           ;        SINCE CHHI IS A CONSTANT 9, THEN CHHI*40=360
-  259 5C35           ;        BIT ADDRESS=REM(CSRX*5/8)
-  260 5C35
+  253
+  254                ;        COMPUTE BYTE ADDRESS CONTAINING FIRST SCAN LINE OF
+  255                ;        CHARACTER AT CURSOR POSITION AND PUT IN ADP2
+  256                ;        BIT ADDRESS (BIT 0 IS LEFTMOST) AT BTPT
+  257                ;        BYTE ADDRESS =VMORG*256+CHHI*40*CSRY+INT(CSRX*6/8)
+  258                ;        SINCE CHHI IS A CONSTANT 9, THEN CHHI*40=360
+  259                ;        BIT ADDRESS=REM(CSRX*5/8)
+  260
   261 5C35 A900      CSRTAD:  LDA    #0           ; AERO UPPER ADP2
   262 5C37 85ED               STA    ADP2+1
   263 5C39 AD055B             LDA    CSRY         ; FIRST COMPUTE 360*CSRY
@@ -295,12 +295,12 @@
   294 5C7A 2907               AND    #7           ; BITS OF CSRX*6
   295 5C7C 8D005B             STA    BTPT         ; KEEP IN BTPT
   296 5C7F 60                 RTS                 ; FINISHED
-  297 5C80
-  298 5C80           ;        MERGE A ROW OF 5 DOTS WITH GRAPHIC MEMORY STARTING AT BYTE
-  299 5C80           ;        ADDRESS AND BIT NUMBER IN ADP2 AND BTPT
-  300 5C80           ;        5 DOTS TO MERGE LEFT JUSTIFIED IN A
-  301 5C80           ;        PRESERVES X AND Y
-  302 5C80
+  297
+  298                ;        MERGE A ROW OF 5 DOTS WITH GRAPHIC MEMORY STARTING AT BYTE
+  299                ;        ADDRESS AND BIT NUMBER IN ADP2 AND BTPT
+  300                ;        5 DOTS TO MERGE LEFT JUSTIFIED IN A
+  301                ;        PRESERVES X AND Y
+  302
   303 5C80 8D035B    MERGE:   STA    MRGT1        ; SAVE INPUT DATA
   304 5C83 98                 TYA                 ; SAVE Y
   305 5C84 48                 PHA
@@ -336,20 +336,20 @@
   335 5CC0 68                 PLA                 ; RESTORE y
   336 5CC1 A8                 TAY
   337 5CC2 60                 RTS                 ; RETURN
-  338 5CC3
+  338
   339 5CC3 0783C1E0  MERGT:   .BYTE  X'07,X'83,X'C1,X'E0  ; TABLE OF MASKS FOR OPENING UP
   340 5CC7 F0F8FCFE           .BYTE  X'F0,X'F8,X'FC,X'FE  ; A 5 BIT WINDOW ANYWHERE
   341 5CCB FFFFFFFF           .BYTE  X'FF,X'FF,X'FF,X'FF  ; IN GRAPHIC MEMORY
   342 5CCF 7F3F1F0F           .BYTE  X'7F,X'3F,X'1F,X'0F
-  343 5CD3
-  344 5CD3           ;        FAST MEMORY MOVE ROUTINE
-  345 5CD3           ;        ENTER WITH SOURCE ADDRESS IN ADPT1 AND DESTINATION ADDRESS IN
-  346 5CD3           ;        ADPT2 AND MOVE COUNT (DOUBLE PRECISION) IN DCNT1.
-  347 5CD3           ;        MOVE PROCEEDS FROM LOW TO HIGH ADDRESSES AT APPROXIMATELY 16US
-  348 5CD3           ;        PER BYTE.
-  349 5CD3           ;        EXIT WITH ADDRESS POINTERS AND COUNT IN UNKNOWN STATE.
-  350 5CD3           ;        PRESERVES X AND Y REGISTERS.
-  351 5CD3
+  343
+  344                ;        FAST MEMORY MOVE ROUTINE
+  345                ;        ENTER WITH SOURCE ADDRESS IN ADPT1 AND DESTINATION ADDRESS IN
+  346                ;        ADPT2 AND MOVE COUNT (DOUBLE PRECISION) IN DCNT1.
+  347                ;        MOVE PROCEEDS FROM LOW TO HIGH ADDRESSES AT APPROXIMATELY 16US
+  348                ;        PER BYTE.
+  349                ;        EXIT WITH ADDRESS POINTERS AND COUNT IN UNKNOWN STATE.
+  350                ;        PRESERVES X AND Y REGISTERS.
+  351
   352 5CD3 8A        FMOVE:   TXA                 ; SAVE X AND Y ON THE STACK
   353 5CD4 48                 PHA
   354 5CD5 98                 TYA
@@ -378,13 +378,13 @@
   377 5CFE 68                 PLA
   378 5CFF AA                 TAX
   379 5D00 60                 RTS                 ; AND RETURN
-  380 5D01
-  381 5D01           ;        FAST MEMORY CLEAR ROUTINE
-  382 5D01           ;        ENTER WITH ADDRESS OF BLOCK TO CLEAR IN ADP2 AND CLEAR COUNT
-  383 5D01           ;        IN DCNT1.
-  384 5D01           ;        EXIT WITH ADDRESS POINTERS AND COUNT IN UNKNOWN STATE
-  385 5D01           ;        PRESERVES X AND Y REGISTERS
-  386 5D01
+  380
+  381                ;        FAST MEMORY CLEAR ROUTINE
+  382                ;        ENTER WITH ADDRESS OF BLOCK TO CLEAR IN ADP2 AND CLEAR COUNT
+  383                ;        IN DCNT1.
+  384                ;        EXIT WITH ADDRESS POINTERS AND COUNT IN UNKNOWN STATE
+  385                ;        PRESERVES X AND Y REGISTERS
+  386
   387 5D01 98        FCLR:    TYA                 ; SAVE Y
   388 5D02 48                 PHA
   389 5D03 A000      FCLR1:   LDY    #0
@@ -404,16 +404,16 @@
   403 5D1E 68                 PLA                 ; RESTORE Y
   404 5D1F A8                 TAY
   405 5D20 60                 RTS                 ; RETURN
-  406 5D21
+  406
                               .PAGE    'CHARACTER FONT TABLE'
-  407 5D21           ;        CHARACTER FONT TABLE
-  408 5D21           ;        ENTRIES IN ORDER STARTING AT ASCII BLANK
-  409 5D21           ;        96 ENTRIES
-  410 5D21           ;        EACH ENTRY CONTAINS 7 BYTES
-  411 5D21           ;        7 BYTES ARE CHARACTER MATRIX, TOP ROW FIRST, LEFTMOST DOT
-  412 5D21           ;        IS LEFTMOST IN BYTE
-  413 5D21           ;        LOWER CASE FONT IS SMALL UPPER CASE, 5 BY 5 MATRIX
-  414 5D21
+  407                ;        CHARACTER FONT TABLE
+  408                ;        ENTRIES IN ORDER STARTING AT ASCII BLANK
+  409                ;        96 ENTRIES
+  410                ;        EACH ENTRY CONTAINS 7 BYTES
+  411                ;        7 BYTES ARE CHARACTER MATRIX, TOP ROW FIRST, LEFTMOST DOT
+  412                ;        IS LEFTMOST IN BYTE
+  413                ;        LOWER CASE FONT IS SMALL UPPER CASE, 5 BY 5 MATRIX
+  414
   415 5D21 000000    CHTB:    .BYTE       X'00,X'00,X'00    ; BLANK
   416 5D24 00000000           .BYTE  X'00,X'00,X'00,X'00
   417 5D28 202020             .BYTE       X'20,X'20,X'20    ; !
@@ -608,4 +608,3 @@
   606 5FBD 50A850A8           .BYTE  X'50,X'A8,X'50,X'A8
   607
   608 0000                    .END
-NO ERROR LINES
