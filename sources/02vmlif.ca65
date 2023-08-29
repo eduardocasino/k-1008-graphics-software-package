@@ -280,24 +280,16 @@ NCXIT:   LDY    NCYSV        ; RESTORE Y
 ;        AND BRING IN A NEW LINE FROM DISPLAY MEMORY STARTING AT
 ;        (ADP1) +80 PRESERVES INDEX REGISTERS
 
-.MACRO   U      OP,AD,REG
-     .IF  AD < 0
-         OP     AD+$10000,REG
-     .ELSE
-         OP     AD,REG
-     .ENDIF
-.ENDMACRO
-
          .RES   $200-*
 ROLL:    TYA                 ; SAVE INDEX Y
          PHA
          LDY    #80          ; INITIALIZE INDEX
-ROLL1:   U LDA, CR-80,Y      ; ROLL A BYTE
-         U STA, TR-80,Y
-         U LDA, BR-80,Y
-         U STA, CR-80,Y
+ROLL1:   LDA    CR-80+$10000,Y; ROLL A BYTE
+         STA    TR-80+$10000,Y
+         LDA    BR-80,Y
+         STA    CR-80+$10000,Y
          LDA    (ADP1),Y
-         U STA, BR-80,Y
+         STA    BR-80,Y
          INY                 ; INCREMENT INDEX
          CPY    #120         ; TEST IF 40 BYTES ROLLED
          BNE    ROLL1        ; LOOP IF NOT

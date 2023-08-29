@@ -122,21 +122,13 @@ SDTX3:   JMP    SDTXRT       ; GO INSERT CURSOR, RESTORE REGISTERS,
 
 ;        INTERPRET CONTROL CODES
 
-.MACRO   UCMP   PAR
-    .IF PAR < 0
-         CMP    #PAR+$100
-    .ELSE
-         CMP    #PAR
-    .ENDIF
-.ENDMACRO
-
-SDTX10:  UCMP   $0D-$20      ; TEST IF CR
+SDTX10:  CMP    #($0D-$20)&$FF; TEST IF CR
          BEQ    SDTXCR       ; JUMP IF SO
-         UCMP   $0A-$20      ; TEST IF LF
+         CMP    #($0A-$20)&$FF; TEST IF LF
          BEQ    SDTXLF       ; JUMP IF SO
-         UCMP   $08-$20      ; TEST IF BS
+         CMP    #($08-$20)&$FF; TEST IF BS
          BEQ    SDTXCL       ; JUMP IF SO
-         UCMP   $0C-$20      ; TEST IF FF
+         CMP    #($0C-$20)&$FF; TEST IF FF
          BEQ    SDTXFF       ; JUMP IF SO        
          JMP    SDTXRT       ; GO RETURN IF UNRECOGNIZABLE CONTROL
 
