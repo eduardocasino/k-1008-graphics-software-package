@@ -1,5 +1,5 @@
 
-
+;        .PAGE 'DOCUMENTATION, EQUATES, STORAGE'
 ;        MTU VISIBLE MEMORY DEMONSTRATION PROGRAM
 ;        JOSEPH CONWAY'S GAME OF LIFE ON A 320 BY 200 MATRIX
 
@@ -45,7 +45,7 @@ NY       =      200          ; NUMBER OF ROWS  (CHANGE FOR HALF SCREEN
 NPIX     =      NX*NY        ; NUMBER OF PIXELS
 DBCDLA   =      50           ; KIM KEYBOARD DEBOUNCE DELAY TIME
 
-         .ORG   0            ; START DEMO PROGRAM AT LOCATION ZERO
+         *=     0            ; START DEMO PROGRAM AT LOCATION ZERO
 
 ;        PARAMETER STORAGE
 
@@ -53,25 +53,23 @@ VMORG:   .BYTE  $20          ; FIRST PAGE IN DISPLAY MEMORY
 
 ;        MISCELLANEOUS STORAGE
 
-NCYSV:   .RES   1            ; TEMPORARY STORAGE FOR NEIGHBOR COUNT
+NCYSV:   .BYTE  ?            ; TEMPORARY STORAGE FOR NEIGHBOR COUNT
                              ; ROUTINE
-NCNT:    .RES   1            ; COUNT OF LIVE NEIGHBORS
-LNCNT:   .RES   1            ; CELL LINE COUNTER
-NGEN:    .RES   1            ; BYTE TO ACCUMULATE NEW CELLS
-ADP1:    .RES   2            ; ADDRESS POINTER 1
-ADP2:    .RES   2            ; ADDRESS POINTER 2
-BTPT:    .RES   1            ; BIT NUMBER
-X1CORD:  .RES   2            ; COORDINATE PAIR 1
-Y1CORD:  .RES   2
-X2CORD:  .RES   2            ; COORDINATE PAIR 2
-Y2CORD:  .RES   2
-TEMP:    .RES   2            ; TEMPORARY STORAGE
-FLASHC:  .RES   2            ; TIME DELAY COUNTER FOR CURSOR FLASHING
+NCNT:    .BYTE  ?            ; COUNT OF LIVE NEIGHBORS
+LNCNT:   .BYTE  ?            ; CELL LINE COUNTER
+NGEN:    .BYTE  ?            ; BYTE TO ACCUMULATE NEW CELLS
+ADP1:    .WORD  ?            ; ADDRESS POINTER 1
+ADP2:    .WORD  ?            ; ADDRESS POINTER 2
+BTPT:    .BYTE  ?            ; BIT NUMBER
+X1CORD:  .WORD  ?            ; COORDINATE PAIR 1
+Y1CORD:  .WORD  ?
+X2CORD:  .WORD  ?            ; COORDINATE PAIR 2
+Y2CORD:  .WORD  ?
+TEMP:    .WORD  ?            ; TEMPORARY STORAGE
+FLASHC:  .WORD  ?            ; TIME DELAY COUNTER FOR CURSOR FLASHING
 LSTKEY   =      NCYSV        ; CODE OF LAST KEY PRESSED ON KIM KEYBOARD
 DBCNT    =      NCNT         ; KIM KEYBOARD DEBOUNCE COUNTER
 REALST   =      LNCNT        ; STATE OF CELL UNDER THE CURSOR
-
-KYPT6    =      $1780
 
 ;        TABLE OF MASKS FOR NEIGHBOR COUNTING
 
@@ -83,11 +81,12 @@ MSK:     .BYTE  $80,$40,$20,$10
 ;        STORAGE TO BUFFER 3 FULL SCAN LINES OF CELLS
 
          .BYTE  0
-TR:      .RES   40           ; ROW ABOVE CENTRAL ROW
-CR:      .RES   40           ; CENTRAL ROW
-BR:      .RES   40           ; ROW BELOW CENTRAL ROW
+TR:      .fill  40           ; ROW ABOVE CENTRAL ROW
+CR:      .fill  40           ; CENTRAL ROW
+BR:      .fill  40           ; ROW BELOW CENTRAL ROW
          .BYTE  0
 
+;        .PAGE  'INITIAL PATTERN GENERATION ROUTINES'
 ;        CLEAR DISPLAY MEMORY AND INITIALIZE ROUTINE
 ;        USED TO PREPARE SCREEN FOR USER ENTERED PATTERN
 
@@ -143,7 +142,8 @@ CSRDEL:  LDA    REALST       ; GET SAVED CELL STATE
          JSR    WRPIX        ; PUT IT BACK INTO DISPLAY MEMORY
          RTS                 ; RETURN
 
-         .RES   $100-*
+;        .PAGE   'MAIN LIFE ROUTINE'
+         *=     $100
 
 LIFE:    LDA    #0           ; PRIME THE THREE LINE BUFFERS
          STA    ADP1         ; INITIALIZE VM POINTER TO TOP OF SCREEN
@@ -177,6 +177,7 @@ LIFE3:   JSR    GETKEY
          JMP    KYPT         ; GO TO KEYBOARD PATTERN ENTRY IF A
                              ; KEY WAS PRESSED
 
+;        .PAGE  'LIFE NEXT GENERATION ROUTINE FOR BUFFER CONTENTS'
 ;        LIFE NEXT GENERATION ROUTINE
 ;        THE CELLS IN THE MIDDLE LINE BUFFER ARE SCANNED AND THEIR
 ;        NEIGHBORS COUNTED TO DETERMINE IF THEY LIVE, DIE, OR GIVE
@@ -221,6 +222,7 @@ LFBUF7:  ORA    NGEN
          STA    NGEN
          JMP    LFBUF4
 
+;        .PAGE 'NEIGHBOR COUNT ROUTINE'
 ;        NEIGHBOR COUNT ROUTINE FOR ALL EIGHT NEIGHBORS OF A CENTRAL
 ;        CELL. USES THREE SCAN LINE BUFFER IN BASE PAGE FOR MAXIMUM
 ;        SPEED. INDEX Y POINTS TO BYTE CONTAINING CENTRAL CELL
@@ -276,18 +278,19 @@ N8:      LDA    BR,Y
 NCXIT:   LDY    NCYSV        ; RESTORE Y
          RTS                 ; AND RETURN
 
+;        .PAGE  'CELL LINE MOVE ROUTINES'
 ;        ROLL THE THREE LINE BUFFERS UP ONE POSITION
 ;        AND BRING IN A NEW LINE FROM DISPLAY MEMORY STARTING AT
 ;        (ADP1) +80 PRESERVES INDEX REGISTERS
 
-         .RES   $200-*
+         *=     $200
 ROLL:    TYA                 ; SAVE INDEX Y
          PHA
          LDY    #80          ; INITIALIZE INDEX
-ROLL1:   LDA    CR-80+$10000,Y; ROLL A BYTE
-         STA    TR-80+$10000,Y
+ROLL1:   LDA    CR-80,Y      ; ROLL A BYTE
+         STA    TR-80,Y
          LDA    BR-80,Y
-         STA    CR-80+$10000,Y
+         STA    CR-80,Y
          LDA    (ADP1),Y
          STA    BR-80,Y
          INY                 ; INCREMENT INDEX
@@ -306,7 +309,7 @@ PRIME:   TYA                 ; SAVE INDEX Y
          PHA
          LDY    #119         ; INITIALIZE INDEX
 PRIME1:  LDA    (ADP1),Y     ; MOVE A BYTE
-         STA    TR,Y
+         STA     TR,Y
          DEY                 ; DECREMENT INDEX
          BPL    PRIME1       ; LOOP IF NOT DONE
          PLA                 ; RESTORE Y
@@ -331,6 +334,7 @@ CLEAR1:  TYA                 ; CLEAR A BYTE
          BNE    CLEAR1
          RTS                 ; RETURN
 
+;        .PAGE  'GRAPHICS ROUTINES FOR GENERATING THE INITIAL PATTERN'
 ;        PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
 ;                 X1CORD, Y1CORD
 ;        PUTS BYTE ADDRESS IN ADP1 AND BIT NUMBER (BIT 0 IS LEFTMOST)
@@ -425,7 +429,7 @@ CLPIX1:  STA    (ADP1),Y     ; BYTE
          RTS                 ; AND RETURN
 
 ;        WRPIX - SETS THE PIXEL AT X1CORD,Y1CORD ACCORDING TO THE STATE
-;        OF BIT O (RIGHTMOST) OF A
+;        OF BIT 0 (RIGHTMOST) OF A
 ;        DOES NOT ALTER X1CORD OR Y1CORD
 ;        PRESERVES X AND Y
 ;        ASSUMES IN RANGE CORRDINATES
@@ -460,7 +464,7 @@ RDPIX1:  STA    ADP1         ; SAVE A TEMPORARILY IN ADP1 WHILE
 
 ;        MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
 ;        MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
-;        MSKTB2 IS A TABLE OF O BITS CORRESPONDING TO BIT NUMBERS
+;        MSKTB2 IS A TABLE OF 0 BITS CORRESPONDING TO BIT NUMBERS
 
 MSKTB1:  .BYTE  $80,$40,$20,$10
          .BYTE  $08,$04,$02,$01
@@ -515,6 +519,7 @@ UPDC4:   DEC    X1CORD,X
          INY                 ; SET "DONE SOMETHING" FLAG
 UPDC5:   RTS                 ; RETURN
 
+;        .PAGE  'COORDINATE LIST FOR DRAWING INITIAL FIGURE'
 ;        COORDINATE LIST DEFINING THE INITIAL PATTERN FOR LIFE
 ;        EACH VERTEX IN THE FIGURE IS REPRESENTED BY 4 BYTES
 ;        THE FIRST TWO BYTES ARE THE X COORDINATE OF THE NEXT ENDPOINT
@@ -526,19 +531,19 @@ UPDC5:   RTS                 ; RETURN
 ;        CURRENT POSITION TO THE NEW POSITION IS DONE.
 ;        IF THE HIGH BYTE OF X = $FF, IT IS THE END OF THE LIST.
 
-LIST:    .WORD  56+$8000,60    ; 1     MOVE
+LIST:    .WORD  56+$8000,60   ; 1     MOVE
          .WORD  56,140         ; 2     DRAW
          .WORD  72,140         ; 3     DRAW
          .WORD  72,76          ; 4
          .WORD  104,76         ; 5
          .WORD  104,60         ; 6
          .WORD  56,60          ; 7
-         .WORD  120+$8000,60   ; 8     MOVE
+         .WORD  120+$8000,60  ; 8     MOVE
          .WORD  120,140        ; 9
          .WORD  136,140        ; 10
          .WORD  136,60         ; 11
          .WORD  120,60         ; 12
-         .WORD  152+$8000,60   ; 13    MOVE
+         .WORD  152+$8000,60  ; 13    MOVE
          .WORD  152,140        ; 14
          .WORD  200,140        ; 15
          .WORD  200,124        ; 16
@@ -549,7 +554,7 @@ LIST:    .WORD  56+$8000,60    ; 1     MOVE
          .WORD  168,92         ; 21
          .WORD  168,60         ; 22
          .WORD  152,60         ; 23
-         .WORD  216+$8000,60   ; 24    MOVE
+         .WORD  216+$8000,60  ; 24    MOVE
          .WORD  216,140        ; 25
          .WORD  264,140        ; 26
          .WORD  264,124        ; 27
@@ -564,6 +569,7 @@ LIST:    .WORD  56+$8000,60    ; 1     MOVE
          .WORD  216,60         ; 36
          .WORD  $FFFF          ; END OF LIST
 
+;        .PAGE  'KEYBOARD PATTERN ENTRY ROUTINES'
 ;        KEYBOARD PATTERN ENTRY ROUTINES
 ;        USES THE KIM KEYBOARD AND A CURSOR TO SIMPLIFY THE ENTRY
 ;        OF INITIAL LIFE PATTERNS
@@ -585,7 +591,7 @@ KYPT1:   INC    FLASHC       ; DOUBLE INCREMENT CURSOR FLASH COUNT
 ;        GENERATE A 25% DUTY CURSOR IF CELL IS DEAD AND 75% IF ALIVE
 
 KYPT2:   LDA    FLASHC+1     ; GET HIGH BYTE OF FLASH COUNTER
-         LSR A               ; COMPUTE LOGICAL "AND" OF BITS O AND 1
+         LSR    A            ; COMPUTE LOGICAL "AND" OF BITS O AND 1
          AND    FLASHC+1     ; IN ACC BIT 0
          EOR    REALST       ; EXCLUSIVE-OR WITH REAL STATE OF CELL
          JSR    WRPIX        ; DISPLAY THE CURSOR
@@ -600,3 +606,58 @@ KYPT2:   LDA    FLASHC+1     ; GET HIGH BYTE OF FLASH COUNTER
                              ; OUT
          STA    LSTKEY       ; AFTER DEBOUNCE, UPDATE KEY LAST PRESSED
          JMP    KYPT6        ; AND GO PROCESS THE KEYSTROKE
+
+         *=     $1780        ; CONTINUE PROGRAM IN 6530 RAM
+
+KYPT6:   CMP    #1           ; TEST "1" KEY
+         BEQ    CSRD         ; JUMP IF CURSOR DOWN
+         CMP    #9           ; TEST "9" KEY
+         BEQ    CSRU         ; JUMP IF CURSOR UP
+         CMP    #4           ; TEST "4" KEY
+         BEQ    CSRL         ; JUMP IF CURSOR LEFT
+         CMP    #6           ; TEST "6" KEY
+         BEQ    CSRR         ; JUMP IF CURSOR RIGHT
+         CMP    #19          ; TEST "GO" KEY
+         BEQ    GO           ; JUMP IF GO KEY
+         CMP    #18          ; TEST "+" KEY
+         BEQ    SETCEL       ; JUMP IF SET CELL KEY
+         CMP    #15          ; TEST "F" KEY
+         BEQ    CLRCEL       ; JUMP IF CLEAR CELL KEY
+         JMP    KYPT0        ; IGNORE ANY OTHER KEYS
+
+CSRD:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+         DEC    Y1CORD       ; DECREMENT Y COORDINATE FOR CURSOR DOWN
+         JMP    CSRMOV
+
+CSRU:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+         INC    Y1CORD       ; INCREMENT Y COORDINATE FOR CURSOR UP
+         JMP    CSRMOV
+
+CSRL:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+         LDA    X1CORD       ; DECREMENT X COORDINATE FOR CURSOR LEFT
+         BNE    CSRL1
+         DEC    X1CORD+1
+CSRL1:   DEC    X1CORD
+         JMP    CSRMOV
+
+CSRR:    JSR    CSRDEL       ; DELETE EXISTING CURSOR
+         INC    X1CORD       ; INCREMENT X COORDINATE FOR CURSOR RIGHT
+         BNE    CSRMOV
+         INC    X1CORD+1
+
+CSRMOV:  JSR    CSRINS       ; INSERT CURSOR AT NEW LOCATION
+         JMP    KYPT0        ; GO BACK TO KEYBOARD INPUT LOOP
+
+SETCEL:  LDA    #$FF         ; SET REAL CELL STATE TO LIVE
+         BNE    CLRCL1
+
+CLRCEL:  LDA    #0           ; SET REAL CELL STATE TO DEAD
+CLRCL1:  STA    REALST
+         JMP    KYPT0        ; GO BACK TO KEYBOARD INPUT LOOP
+
+GO:      JSR    CSRDEL       ; DELETE CURSOR AND RESTORE THE CELL UNDER
+                             ; THE CURSOR
+         JMP    LIFE         ; AND GO EXECUTE LIFE
+
+
+         .END

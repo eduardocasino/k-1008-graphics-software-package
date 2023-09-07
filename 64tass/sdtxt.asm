@@ -1,5 +1,5 @@
 
-
+;        .PAGE  'SIMPLIFIED VISABLE MEMORY TEXT DISPLAY SUBROUTINE'
 ;        THIS SUBROUTINE TURNS THE VISABLE MEMORY INTO A DATA DISPLAY
 ;        TERMINAL (GLASS TELETYPE).
 ;        CHARACTER SET IS 96 FULL ASCII UPPER AND LOWER CASE.
@@ -9,13 +9,13 @@
 ;        OR 11 LINES FOR HALF SCREEN.
 ;        CURSOR IS A NON-BLINKING UNDERLINE.
 ;        CONTROL CODES RECOGNIZED:
-;        CR     $0D         SETS CURSOR TO LEFT SCREEN EDGE
-;        LF     $0A         MOVES CURSOR DOWN ONE LINE, SCROLLS
+;        CR     $0D          SETS CURSOR TO LEFT SCREEN EDGE
+;        LF     $0A          MOVES CURSOR DOWN ONE LINE, SCROLLS
 ;                            DISPLAY UP ONE LINE IF ALREADY ON BOTTOM
 ;                            LINE
-;        BS     $08         MOVES CURSOR ONE CHARACTER LEFT, DOES
+;        BS     $08          MOVES CURSOR ONE CHARACTER LEFT, DOES
 ;                            NOTHING IF ALREADY AT LEFT SCREEN EDGE
-;        FF     $0C         CLEARS SCREEN AND PUTS CURSOR AT TOP LEFT
+;        FF     $0C          CLEARS SCREEN AND PUTS CURSOR AT TOP LEFT
 ;                            OF SCREEN, SHOULD BE CALLED FOR
 ;                            INITIALIZATION
 ;        ALL OTHER CONTROL CODES IGNORED.
@@ -43,23 +43,23 @@ NCLR     =      NLOC-NSCRL   ; NUMBER OF LOCATIONS TO CLEAR AFTER SCROLL
 
 ;        BASE PAGE TEMPORARY STORAGE
 
-ADP1     =      $EA
-ADP2     =      $EC
-
+         *=     $EA
+ADP1     .WORD  ?            ; ADDRESS POINTER 1
+ADP2     .WORD  ?            ; ADDRESS POINTER 2
 
 ;        GENERAL TEMPORARY STORAGE
 
-         .ORG   $5B00        ; PLACE AT END OF 16K EXPANSION
+         *=     $5B00        ; PLACE AT END OF 16K EXPANSION
 
-BTPT:    .RES   1            ; BIT NUMBER TEMPORARY STORAGE
-DCNT1:   .RES   2            ; DOUBLE PRECISION COUNTER
-MRGT1:   .RES   1            ; TEMPORARY STORAGE FOR MERGE
+BTPT:    .BYTE  ?            ; BIT NUMBER TEMPORARY STORAGE
+DCNT1:   .WORD  ?            ; DOUBLE PRECISION COUNTER
+MRGT1:   .BYTE  ?            ; TEMPORARY STORAGE FOR MERGE
 
 ;        PERMANENT RAM STORAGE
 
-CSRX:    .RES   1            ; CURRENT CHARACTER NUMBER (0=LEFT CHAR)
-CSRY:    .RES   1            ; CURRENT LINE NUMBER (0=TOP LINE)
-VMORG:   .RES   1            ; FIRST PAGE NUMBER OF VISIBLE MEMORY
+CSRX:    .BYTE  ?            ; CURRENT CHARACTER NUMBER (0=LEFT CHAR)
+CSRY:    .BYTE  ?            ; CURRENT LINE NUMBER (0=TOP LINE)
+VMORG:   .BYTE  ?            ; FIRST PAGE NUMBER OF VISIBLE MEMORY
 
 SDTXT:   PHA                 ; SAVE REGISTERS
          TXA
@@ -109,7 +109,7 @@ SDTX2:   LDA    (ADP1),Y     ; GET A DOT ROW FROM THE FONT TABLE
          JSR    MERGE        ; MERGE IT WITH GRAPHIC MEMORY AT (ADP2)
          JSR    DN1SCN       ; ADD 40 TO ADP2 TO MOVE DOWN ONE SCAN
                              ; LINE IN GRAPHIC MEMORY
-         INY                 ; BUMP UP POINTER INTO FONT TABLE                    
+         INY                 ; BUMP UP POINTER INTO FONT TABLE
          CPY    #7           ; TEST IF DONE
          BNE    SDTX2        ; GO DO NEXT SCAN LINE IF NOT
          LDA    CSRX         ; DO A CURSOR RIGHT
@@ -122,14 +122,14 @@ SDTX3:   JMP    SDTXRT       ; GO INSERT CURSOR, RESTORE REGISTERS,
 
 ;        INTERPRET CONTROL CODES
 
-SDTX10:  CMP    #($0D-$20)&$FF; TEST IF CR
+SDTX10:  CMP    #+$0D-$20    ; TEST IF CR
          BEQ    SDTXCR       ; JUMP IF SO
-         CMP    #($0A-$20)&$FF; TEST IF LF
+         CMP    #+$0A-$20    ; TEST IF LF
          BEQ    SDTXLF       ; JUMP IF SO
-         CMP    #($08-$20)&$FF; TEST IF BS
+         CMP    #+$08-$20    ; TEST IF BS
          BEQ    SDTXCL       ; JUMP IF SO
-         CMP    #($0C-$20)&$FF; TEST IF FF
-         BEQ    SDTXFF       ; JUMP IF SO        
+         CMP    #+$0C-$20    ; TEST IF FF
+         BEQ    SDTXFF       ; JUMP IF SO
          JMP    SDTXRT       ; GO RETURN IF UNRECOGNIZABLE CONTROL
 
 SDTXCR:  JSR    CSRCLR       ; CARRIAGE RETURN, FIRST CLEAR CURSOR
@@ -181,7 +181,7 @@ SDTX40:  LDA    #0           ; SET UP ADDRESS POINTERS FOR MOVE
                              ; SPEED MEMORY MOVE ROUTINE
 
                              ; CLEAR LAST LINE OF TEXT
-         LDA    #((NLIN-1)*CHHI*40)&$FF ; SET ADDRESS POINTER
+         LDA    #((NLIN-1)*CHHI*40)&$FF   ; SET ADDRESS POINTER
          STA    ADP2         ; LOW BYTE
          LDA    #(NLIN-1)*CHHI*40/256
          CLC
@@ -203,6 +203,7 @@ SDTXRT:  JSR    CSRSET       ; RETURN SEQUENCE, INSERT CURSOR
          PLA
          RTS                 ; RETURN
 
+;        .PAGE  'SUBROUTINES FOR SDTXT'
 ;        COMPUTE ADDRESS OF BYTE CONTAINING LAST SCAN LINE OF
 ;        CHARACTER AT CURSOR POSITION
 ;        ADDRESS = CSRTAD+(CHHI-1)*40   SINCE CHHI IS A CONSTANT 9,
@@ -261,9 +262,9 @@ DN1SCN:  LDA    ADP2         ; ADD 40 TO LOW BYTE
 CSRTAD:  LDA    #0           ; AERO UPPER ADP2
          STA    ADP2+1
          LDA    CSRY         ; FIRST COMPUTE 360*CSRY
-         ASL A               ;   COMPUTE 9*CSRY DIRECTLY IN A
-         ASL A
-         ASL A
+         ASL    A            ;   COMPUTE 9*CSRY DIRECTLY IN A
+         ASL    A
+         ASL    A
          ADC    CSRY
          STA    ADP2         ;   STORE 9*CSRY IN LOWER ADP2
          JSR    SADP2L       ;   18*CSRY IN ADP2
@@ -277,13 +278,13 @@ CSRTAD:  LDA    #0           ; AERO UPPER ADP2
          JSR    SADP2L       ;   180*CSRY IN ADP2
          JSR    SADP2L       ;   360*CSRY IN ADP2
          LDA    CSRX         ; NEXT COMPUTE 6*CSRX WHICH IS A 9 BIT
-         ASL A               ; VALUE
+         ASL    A            ; VALUE
          ADC    CSRX
-         ASL A
+         ASL    A
          STA    BTPT         ;   SAVE RESULT TEMPORARILY
-         ROR A               ;   DIVIDE BY 8 AND TRUNCATE FOR INT
-         LSR A               ;   FUNCTION
-         LSR A               ;   NOW HAVE INT(CSRX*6/8)
+         ROR    A            ;   DIVIDE BY 8 AND TRUNCATE FOR INT
+         LSR    A            ;   FUNCTION
+         LSR    A            ;   NOW HAVE INT(CSRX*6/8)
          CLC                 ; DOUBLE ADD TO ADP2
          ADC    ADP2
          STA    ADP2
@@ -316,7 +317,7 @@ MERGE:   STA    MRGT1        ; SAVE INPUT DATA
          LDA    MRGT1        ; SHIFT DATA RIGHT TO LINE UP LEFTMOST
          LDY    BTPT         ; DATA BIT WITH LEFTMOST GRAPHIC FIELD
          BEQ    MERGE2       ; SHIFT BTPT TIMES
-MERGE1:  LSR A
+MERGE1:  LSR    A
          DEY
          BNE    MERGE1
 MERGE2:  ORA    (ADP2),Y     ; OVERLAY WITH GRAPHIC MEMORY
@@ -326,7 +327,7 @@ MERGE2:  ORA    (ADP2),Y     ; OVERLAY WITH GRAPHIC MEMORY
          SBC    BTPT         ; SHIFT (8-BTPT) TIMES
          TAY
          LDA    MRGT1
-MERGE3:  ASL A
+MERGE3:  ASL    A
          DEY
          BNE    MERGE3
          INY
@@ -336,9 +337,9 @@ MERGE3:  ASL A
          TAY
          RTS                 ; RETURN
 
-MERGT:   .BYTE  $07,$83,$C1,$E0  ; TABLE OF MASKS FOR OPENING UP
-         .BYTE  $F0,$F8,$FC,$FE  ; A 5 BIT WINDOW ANYWHERE
-         .BYTE  $FF,$FF,$FF,$FF  ; IN GRAPHIC MEMORY
+MERGT:   .BYTE  $07,$83,$C1,$E0       ; TABLE OF MASKS FOR OPENING UP
+         .BYTE  $F0,$F8,$FC,$FE       ; A 5 BIT WINDOW ANYWHERE
+         .BYTE  $FF,$FF,$FF,$FF       ; IN GRAPHIC MEMORY
          .BYTE  $7F,$3F,$1F,$0F
 
 ;        FAST MEMORY MOVE ROUTINE
@@ -404,6 +405,7 @@ FCLR4:   STA    (ADP2),Y
          TAY
          RTS                 ; RETURN
 
+;        .PAGE    'CHARACTER FONT TABLE'
 ;        CHARACTER FONT TABLE
 ;        ENTRIES IN ORDER STARTING AT ASCII BLANK
 ;        96 ENTRIES
@@ -420,7 +422,7 @@ CHTB:    .BYTE      $00,$00,$00        ; BLANK
          .BYTE  $00,$00,$00,$00
          .BYTE      $50,$50,$F8        ; #
          .BYTE  $50,$F8,$50,$50
-         .BYTE      $20,$78,$A0        ; $
+         .BYTE      $20,$78,$A0        ; X'
          .BYTE  $70,$28,$F0,$20
          .BYTE      $C8,$C8,$10        ; %
          .BYTE  $20,$40,$98,$98
@@ -478,131 +480,131 @@ CHTB:    .BYTE      $00,$00,$00        ; BLANK
          .BYTE  $10,$20,$00,$20
          .BYTE      $70,$88,$08        ; @
          .BYTE  $68,$A8,$A8,$D0
-         .BYTE      $20,$50,$88       ; A
+         .BYTE      $20,$50,$88        ; A
          .BYTE  $88,$F8,$88,$88
-         .BYTE      $F0,$48,$48       ; B
+         .BYTE      $F0,$48,$48        ; B
          .BYTE  $70,$48,$48,$F0
-         .BYTE      $70,$88,$80       ; C
+         .BYTE      $70,$88,$80        ; C
          .BYTE  $80,$80,$88,$70
-         .BYTE      $F0,$48,$48       ; D
+         .BYTE      $F0,$48,$48        ; D
          .BYTE  $48,$48,$48,$F0
-         .BYTE      $F8,$80,$80       ; E
+         .BYTE      $F8,$80,$80        ; E
          .BYTE  $F0,$80,$80,$F8
-         .BYTE      $F8,$80,$80       ; F
+         .BYTE      $F8,$80,$80        ; F
          .BYTE  $F0,$80,$80,$80
-         .BYTE      $70,$88,$80       ; G
+         .BYTE      $70,$88,$80        ; G
          .BYTE  $B8,$88,$88,$70
-         .BYTE      $88,$88,$88       ; H
+         .BYTE      $88,$88,$88        ; H
          .BYTE  $F8,$88,$88,$88
-         .BYTE      $70,$20,$20       ; I
+         .BYTE      $70,$20,$20        ; I
          .BYTE  $20,$20,$20,$70
-         .BYTE      $38,$10,$10       ; J
+         .BYTE      $38,$10,$10        ; J
          .BYTE  $10,$10,$90,$60
-         .BYTE      $88,$90,$A0       ; K
+         .BYTE      $88,$90,$A0        ; K
          .BYTE  $C0,$A0,$90,$88
-         .BYTE      $80,$80,$80       ; L
+         .BYTE      $80,$80,$80        ; L
          .BYTE  $80,$80,$80,$F8
-         .BYTE      $88,$D8,$A8       ; M
+         .BYTE      $88,$D8,$A8        ; M
          .BYTE  $A8,$88,$88,$88
-         .BYTE      $88,$88,$C8       ; N
+         .BYTE      $88,$88,$C8        ; N
          .BYTE  $A8,$98,$88,$88
-         .BYTE      $70,$88,$88       ; O
+         .BYTE      $70,$88,$88        ; O
          .BYTE  $88,$88,$88,$70
-         .BYTE      $F0,$88,$88       ; P
+         .BYTE      $F0,$88,$88        ; P
          .BYTE  $F0,$80,$80,$80
-         .BYTE      $70,$88,$88       ; Q
+         .BYTE      $70,$88,$88        ; Q
          .BYTE  $88,$A8,$90,$68
-         .BYTE      $F0,$88,$88       ; R
+         .BYTE      $F0,$88,$88        ; R
          .BYTE  $F0,$A0,$90,$88
-         .BYTE      $78,$80,$80       ; S
+         .BYTE      $78,$80,$80        ; S
          .BYTE  $70,$08,$08,$F0
-         .BYTE      $F8,$20,$20       ; T
+         .BYTE      $F8,$20,$20        ; T
          .BYTE  $20,$20,$20,$20
-         .BYTE      $88,$88,$88       ; U
+         .BYTE      $88,$88,$88        ; U
          .BYTE  $88,$88,$88,$70
-         .BYTE      $88,$88,$88       ; V
+         .BYTE      $88,$88,$88        ; V
          .BYTE  $50,$50,$20,$20
-         .BYTE      $88,$88,$88       ; W
+         .BYTE      $88,$88,$88        ; W
          .BYTE  $A8,$A8,$D8,$88
-         .BYTE      $88,$88,$50       ; X
+         .BYTE      $88,$88,$50        ; X
          .BYTE  $20,$50,$88,$88
-         .BYTE      $88,$88,$50       ; Y
+         .BYTE      $88,$88,$50        ; Y
          .BYTE  $20,$20,$20,$20
-         .BYTE      $F8,$08,$10       ; Z
+         .BYTE      $F8,$08,$10        ; Z
          .BYTE  $20,$40,$80,$F8
-         .BYTE      $70,$40,$40       ; LEFT BRACKET
+         .BYTE      $70,$40,$40        ; LEFT BRACKET
          .BYTE  $40,$40,$40,$70
-         .BYTE      $80,$80,$40       ; BACKSLASH
+         .BYTE      $80,$80,$40        ; BACKSLASH
          .BYTE  $20,$10,$08,$08
-         .BYTE      $70,$10,$10       ; RIGHT BRACKET
+         .BYTE      $70,$10,$10        ; RIGHT BRACKET
          .BYTE  $10,$10,$10,$70
-         .BYTE      $20,$50,$88       ; CARROT
+         .BYTE      $20,$50,$88        ; CARROT
          .BYTE  $00,$00,$00,$00
-         .BYTE      $00,$00,$00       ; UNDERLINE
+         .BYTE      $00,$00,$00        ; UNDERLINE
          .BYTE  $00,$00,$00,$F8
-         .BYTE      $C0,$60,$30       ; GRAVE ACCENT
+         .BYTE      $C0,$60,$30        ; GRAVE ACCENT
          .BYTE  $00,$00,$00,$00
-         .BYTE      $00,$00,$20       ; A (LC)
+         .BYTE      $00,$00,$20        ; A (LC)
          .BYTE  $50,$88,$F8,$88
-         .BYTE      $00,$00,$F0       ; B (LC)
+         .BYTE      $00,$00,$F0        ; B (LC)
          .BYTE  $48,$70,$48,$F0
-         .BYTE      $00,$00,$78       ; C (LC)
+         .BYTE      $00,$00,$78        ; C (LC)
          .BYTE  $80,$80,$80,$78
-         .BYTE      $00,$00,$F0       ; D (LC)
+         .BYTE      $00,$00,$F0        ; D (LC)
          .BYTE  $48,$48,$48,$F0
-         .BYTE      $00,$00,$F8       ; E (LC)
+         .BYTE      $00,$00,$F8        ; E (LC)
          .BYTE  $80,$E0,$80,$F8
-         .BYTE      $00,$00,$F8       ; F (LC)
+         .BYTE      $00,$00,$F8        ; F (LC)
          .BYTE  $80,$E0,$80,$80
-         .BYTE      $00,$00,$78       ; G (LC)
+         .BYTE      $00,$00,$78        ; G (LC)
          .BYTE  $80,$98,$88,$78
-         .BYTE      $00,$00,$88       ; H (LC)
+         .BYTE      $00,$00,$88        ; H (LC)
          .BYTE  $88,$F8,$88,$88
-         .BYTE      $00,$00,$70       ; I (LC)
+         .BYTE      $00,$00,$70        ; I (LC)
          .BYTE  $20,$20,$20,$70
-         .BYTE      $00,$00,$38       ; J (LC)
+         .BYTE      $00,$00,$38        ; J (LC)
          .BYTE  $10,$10,$50,$20
-         .BYTE      $00,$00,$90       ; K (LC)
+         .BYTE      $00,$00,$90        ; K (LC)
          .BYTE  $A0,$C0,$A0,$90
-         .BYTE      $00,$00,$80       ; L (LC)
+         .BYTE      $00,$00,$80        ; L (LC)
          .BYTE  $80,$80,$80,$F8
-         .BYTE      $00,$00,$88       ; M (LC)
+         .BYTE      $00,$00,$88        ; M (LC)
          .BYTE  $D8,$A8,$88,$88
-         .BYTE      $00,$00,$88       ; N (LC)
+         .BYTE      $00,$00,$88        ; N (LC)
          .BYTE  $C8,$A8,$98,$88
-         .BYTE      $00,$00,$70       ; O (LC)
+         .BYTE      $00,$00,$70        ; O (LC)
          .BYTE  $88,$88,$88,$70
-         .BYTE      $00,$00,$F0       ; P (LC)
+         .BYTE      $00,$00,$F0        ; P (LC)
          .BYTE  $88,$F0,$80,$80
-         .BYTE      $00,$00,$70       ; Q (LC)
+         .BYTE      $00,$00,$70        ; Q (LC)
          .BYTE  $88,$A8,$90,$68
-         .BYTE      $00,$00,$F0       ; R (LC)
+         .BYTE      $00,$00,$F0        ; R (LC)
          .BYTE  $88,$F0,$A0,$90
-         .BYTE      $00,$00,$78       ; S (LC)
+         .BYTE      $00,$00,$78        ; S (LC)
          .BYTE  $80,$70,$08,$F0
-         .BYTE      $00,$00,$F8       ; T (LC)
+         .BYTE      $00,$00,$F8        ; T (LC)
          .BYTE  $20,$20,$20,$20
-         .BYTE      $00,$00,$88       ; U (LC)
+         .BYTE      $00,$00,$88        ; U (LC)
          .BYTE  $88,$88,$88,$70
-         .BYTE      $00,$00,$88       ; V (LC)
+         .BYTE      $00,$00,$88        ; V (LC)
          .BYTE  $88,$88,$50,$20
-         .BYTE      $00,$00,$88       ; W (LC)
+         .BYTE      $00,$00,$88        ; W (LC)
          .BYTE  $88,$A8,$D8,$88
-         .BYTE      $00,$00,$88       ; X (LC)
+         .BYTE      $00,$00,$88        ; X (LC)
          .BYTE  $50,$20,$50,$88
-         .BYTE      $00,$00,$88       ; Y (LC)
+         .BYTE      $00,$00,$88        ; Y (LC)
          .BYTE  $50,$20,$20,$20
-         .BYTE      $00,$00,$F8       ; Z (LC)
+         .BYTE      $00,$00,$F8        ; Z (LC)
          .BYTE  $10,$20,$40,$F8
-         .BYTE      $10,$20,$20       ; LEFT BRACE
+         .BYTE      $10,$20,$20        ; LEFT BRACE
          .BYTE  $60,$20,$20,$10
-         .BYTE      $20,$20,$20       ; VERTICAL BAR
+         .BYTE      $20,$20,$20        ; VERTICAL BAR
          .BYTE  $20,$20,$20,$20
-         .BYTE      $40,$20,$20       ; RIGHT BRACE
+         .BYTE      $40,$20,$20        ; RIGHT BRACE
          .BYTE  $30,$20,$20,$40
-         .BYTE      $10,$A8,$40       ; TILDA
+         .BYTE      $10,$A8,$40        ; TILDA
          .BYTE  $00,$00,$00,$00
-         .BYTE      $A8,$50,$A8       ; RUBOUT
+         .BYTE      $A8,$50,$A8        ; RUBOUT
          .BYTE  $50,$A8,$50,$A8
 
          .END

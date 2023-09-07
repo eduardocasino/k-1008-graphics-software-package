@@ -1,5 +1,5 @@
 
-
+;        .PAGE  'DOCUMENTATION, EQUATES, STORAGE'
 ;        SWIRL DRAWING DEMONSTRATION FOR THE MICRO TECHNOLOGY UNLIMITED
 ;        VISIBLE MEMORY 320 BY 200 PIXEL DISPLAY
 
@@ -18,7 +18,7 @@ NY       =      200          ; NUMBER OF ROWS (CHANGE FOR HALF SCREEN
                              ; OPERATION)
 NPIX     =      NX*NY        ; NUMBER OF PIXELS
 
-         .ORG   0            ; START PROGRAM AT ZERO
+         *=     0            ; START PROGRAM AT ZERO
 
 ;        STORAGE FOR SWIRL GENERATOR PROGRAM
 
@@ -27,42 +27,43 @@ FREQ:    .WORD  $7E12        ; FREQUENCY
 DAMP:    .WORD  $7E00        ; 1-(DAMPING FACTOR)
 COSINT:  .WORD  $7800        ; INITIAL COSINE VALUE
                              ; GOOD VALUE FOR GENERAL USE BUT SHOULD BE
-                             ; REDUCED TO X'70 TO PREVENT OVERFLOW WITH
+                             ; REDUCED TO $70  TO PREVENT OVERFLOW WITH
                              ; RANDOMLY SELECTED PARAMETERS
-COS:     .RES   2            ; COSINE VALUE
-SIN:     .RES   2            ; SINE VALUE
+COS:     .WORD  ?            ; COSINE VALUE
+SIN:     .WORD  ?            ; SINE VALUE
 
 ;        GENERAL STORAGE
 
 VMORG:   .BYTE  $20          ; PAGE NUMBER OF FIRST VISIBLE MEMORY
                              ; LOCATION
 RANDNO:  .WORD  $1234        ; INITIAL RANDON NUMBER, MUST NOT BE ZERO
-ADP1:    .RES   2            ; ADDRESS POINTER 1
-ADP2:    .RES   2            ; ADDRESS POINTER 2
-BTPT:    .RES   1            ; BIT NUMBER
-X1CORD:  .RES   2            ; COORDINATE PAIR 1
-Y1CORD:  .RES   2
-X2CORD:  .RES   2            ; COORDINATE PAIR 2
-Y2CORD:  .RES   2
+ADP1:    .WORD  ?            ; ADDRESS POINTER 1
+ADP2:    .WORD  ?            ; ADDRESS POINTER 2
+BTPT:    .BYTE  ?            ; BIT NUMBER
+X1CORD:  .WORD  ?            ; COORDINATE PAIR 1
+Y1CORD:  .WORD  ?
+X2CORD:  .WORD  ?            ; COORDINATE PAIR 2
+Y2CORD:  .WORD  ?
 
 ;        STORAGE FOR ARBITRARY LINE DRAW ROUTINE
 
-DELTAX:  .RES   2            ; DELTA X
-DELTAY:  .RES   2            ; DELTA Y
-ACC:     .RES   2            ; ACCUMULATOR
-XDIR:    .RES   1            ; X MOVEMENT DIRECTION, ZERO=+
-YDIR:    .RES   1            ; Y MOVEMENT DIRECTION, ZERO=+
-XCHFLG:  .RES   1            ; EXCHANGE X AND Y FLAG, EXCHANGE IF NOT O
-COLOR:   .RES   1            ; COLOR OF LINE DRAWN -1=WHITE
-TEMP:    .RES   2            ; TEMPORARY STORAGE
+DELTAX:  .WORD  ?            ; DELTA X
+DELTAY:  .WORD  ?            ; DELTA Y
+ACC:     .WORD  ?            ; ACCUMULATOR
+XDIR:    .BYTE  ?            ; X MOVEMENT DIRECTION, ZERO=+
+YDIR:    .BYTE  ?            ; Y MOVEMENT DIRECTION, ZERO=+
+XCHFLG:  .BYTE  ?            ; EXCHANGE X AND Y FLAG, EXCHANGE IF NOT O
+COLOR:   .BYTE  ?            ; COLOR OF LINE DRAWN -1=WHITE
+TEMP:    .WORD  ?            ; TEMPORARY STORAGE
 
 ;        STORAGE FOR THE ARITHMETIC SUBROUTINES
 
-PROD:    .RES   4            ; PRODUCT FOR ARITHMETIC ROUTINES
-MPCD:    .RES   2            ; MUPTIPLICAND FOR ARITHMETIC
+PROD:    .DWORD ?            ; PRODUCT FOR ARITHMETIC ROUTINES
+MPCD:    .WORD  ?            ; MUPTIPLICAND FOR ARITHMETIC
 MPLR     =      PROD         ; MULTIPLIER FOR ARITHMETIC ROUTINES
-MPSAVE:  .RES   2            ; TEMPORARY STORAGE FOR MULTIPLY
+MPSAVE:  .WORD  ?            ; TEMPORARY STORAGE FOR MULTIPLY
 
+;        .PAGE  'MAIN SWIRL GENERATION ROUTINE'
 ;        SWIRL ROUTINE FOR STRAIGHT LINES CONNECTING THE POINTS
 
 SWIRL:   JSR    SWINIT       ; INITIALIZE COS AND SIN
@@ -82,7 +83,7 @@ RSWR1:   JSR    RAND         ; INITIALIZE FREQ RANDOMLY WITH UNIFORM
          JSR    RAND
          STA    FREQ+1
          JSR    RNDEXP       ; INITIALIZE DAMP RANDOMLY WITH A NEGATIVE
-         LSR A               ; EXPONENTIAL DISTRIBUTION
+         LSR    A            ; EXPONENTIAL DISTRIBUTION
          EOR    #$7F         ; IN THE UPPER BYTE AND UNIFORM
          STA    DAMP+1       ; DISTRIBUTION IN THE LOWER BYTE
          JSR    RAND
@@ -100,11 +101,11 @@ RSWR3:   JSR    DRAW         ; ORAW A LINE FROM THE LAST POINT PLOTTED
          JSR    POINT        ; COMPUTE THE NEXT POINT
 RSWR4:   LDA    SIN+1        ; TEST IF PATTERN HAS DECAYED TO NEARLY
          BEQ    RSWR5        ; ZERO
-         CMP    #$FF
+         CMP    #$FF 
          BNE    RSWR2
 RSWR5:   LDA    COS+1
          BEQ    RSWIRL       ; GO START A NEW PATTERN IF SO
-         CMP    #$FF
+         CMP    #$FF 
          BEQ    RSWIRL
          BNE    RSWR2        ; GO COMPUTE NEXT POINT IF NOT
 
@@ -165,11 +166,12 @@ SCALE:   LDA    COS          ; X2CORD=NX/2*SIN4NX/2
          STA    Y2CORD+1
          RTS                 ; RETURN
 
+;        .PAGE  'POINT – COMPUTE NEXT POINT'
 ;        POINT - COMPUTE NEXT VALUE OF COS,SIN FROM CURRENT VALUE OF
 ;        COS,SIN ACCORDING TO FREQ AND DAMP. DIFFERENCE EQUATION FOR
 ;        AN ELIPSE IS USED
 
-         .RES   $100-*
+         *=     $100 
 
 POINT:   LDA    SIN          ; FIRST COMPUTE DAMP*SIN AND PUT INTO SIN
          STA    MPCD
@@ -233,6 +235,7 @@ C2TOC1:  LDA    X2CORD       ; DO THE MOVING
          STA    Y1CORD+1
          RTS                 ; RETURN
 
+;        .PAGE  'ABBREVIATED GRAPHICS ROUTINES'
 ;        PIXADR - FIND THE BYTE ADDRESS AND BIT NUMBER OF PIXEL AT
 ;                 X1CORD, Y1CORD
 ;        PUTS BYTE ADDRESS IN ADP1 AND BIT NUMBER (BIT 0 IS LEFTMOST)
@@ -310,7 +313,7 @@ STPIX:   JSR    PIXADR       ; GET BYTE ADDRESS AND BIT NUMBER OF PIXEL
          TAY
          RTS                 ; AND RETURN
 
-         .RES   $200-*
+         *=     $200 
 
 ;        CLEAR DISPLAY MEMORY ROUTINE
 
@@ -319,7 +322,7 @@ CLEAR:   LDY    #0           ; INITIALIZE ADDRESS POINTER
          LDA    VMORG
          STA    ADP1+1
          CLC
-         ADC    #$20
+         ADC    #$20 
          TAX
 CLEAR1:  TYA                 ; CLEAR A BYTE
          STA    (ADP1),Y
@@ -333,9 +336,10 @@ CLEAR1:  TYA                 ; CLEAR A BYTE
 ;        MASK TABLES FOR INDIVIDUAL PIXEL SUBROUTINES
 ;        MSKTB1 IS A TABLE OF 1 BITS CORRESPONDING TO BIT NUMBERS
 
-MSKTB1:  .BYTE  $80,$40,$20,$10
-         .BYTE  $08,$04,$02,$01
+MSKTB1:  .BYTE  $80,$40,$20,$10 
+         .BYTE  $08,$04,$02,$01 
 
+;        .PAGE  'LINE DRAWING ROUTINES'
 ;        DRAW - DRAW THE BEST STRAIGHT LINE FROM X1CORD,Y1CORD TO
 ;        X2CORD, Y2CORD.
 ;        X2CORD,Y2CORD COPIED TO X1CORD,Y1CORD AFTER DRAWING
@@ -515,6 +519,7 @@ BMPY2:   LDA    Y1CORD       ; DOUBLE DECREMENT Y1CORD IF YDIR<>0
 BMPY3:   DEC    Y1CORD
          RTS
 
+;        .PAGE  'MULTIPLY, SHIFT, AND RANDOM NUMBER ROUTINES'
 ;        SIGNED MULTIPLY SUBROUTINE
 ;        ENTER WITH SIGNED MULTIPLIER IN PROD AND PROD+1
 ;        ENTER WITH SIGNED MULTIPLICAND IN MPCD AND MPCD+1
@@ -586,7 +591,8 @@ UNSM2:   PLA                 ; RESTORE X
 ;        DESTROYS A, PRESERVES X AND Y, RETURNS BIT SHIFTED OUT IN CARRY
 
 SRQA:    LDA    PROD+3       ; GET SIGN BIT OF PROD IN CARRY
-         ASL A
+         ASL    A
+         ASLA
 SRQL:    ROR    PROD+3       ; LOGICAL SHIFT RIGHT ENTRY
          ROR    PROD+2
          ROR    PROD+1
@@ -615,17 +621,17 @@ RLQL:    ROL    PROD         ; SHIFT IN CARRY ENTRY
 
 RAND:    LDY    #8           ; SET COUNTER FOR 8 RANDOM BITS
 RAND1:   LDA    RANDNO       ; EXCLUSIVE-OR BITS 3, 12, 14, AND 15
-         LSR A               ; OF SEED
+         LSR    A            ; OF SEED
          EOR    RANDNO
-         LSR A
-         LSR A
+         LSR    A
+         LSR    A
          EOR    RANDNO
-         LSR A
+         LSR    A
          EOR    RANDNO+1     ; RESULT IS IN BIT 3 OF A
-         LSR A               ; SHIFT INTO CARRY
-         LSR A
-         LSR A
-         LSR A
+         LSR    A            ; SHIFT INTO CARRY
+         LSR    A
+         LSR    A
+         LSR    A
          ROL    RANDNO+1     ; SHIFT RANDNO LEFT ONE BRINGING IN CARRY
          ROL    RANDNO
          DEY                 ; TEST IF 8 NEW RANDOM BITS COMPUTED
@@ -649,7 +655,7 @@ RNDEXP:  JSR    RAND         ; GET TWO NEW RANDOM BYTES
          LDA    RANDNO+1     ; GET THE OTHER RANDOM NUMBER AND SHIFT IT
 RNDXP1:  DEY                 ; RIGHT ACCORDING TO Y
          BEQ    RNDXP2
-         LSR A
+         LSR    A
          JMP    RNDXP1
 RNDXP2:  ORA    #0           ; TEST FOR A ZERO RESULT
          BEQ    RNDEXP       ; PROHIBIT ZERO RESULTS
@@ -658,12 +664,12 @@ RNDXP2:  ORA    #0           ; TEST FOR A ZERO RESULT
 ;        RANGCK - CHECK FOR ACCEPTABLE RANGE OF FREQ AND DAMP PARAMETERS
 ;        RETURN WITH CARRY OFF IF OK
 
-RANGCK:  LDA    FREQ+1       ; MINIMUM ABSOLUTE VALUE FOR FREQ IS $0100
+RANGCK:  LDA    FREQ+1       ; MINIMUM ABSOLUTE VALUE FOR FREQ IS $0100 
          BEQ    RANGNK       ; GO TO FAILURE RETURN IF HIGH BYTE IS 0
-         CMP    #$FF
+         CMP    #$FF 
          BEQ    RANGNK       ; GO TO FAILURE RETURN IF HIGH BYTE IS FF
 RANG2:   LDA    DAMP+1       ; CHECK THAT DAMP IS NOT GREATER THAN
-         CMP    #$7F         ; $7EFF
+         CMP    #$7F         ; $7EFF 
          BEQ    RANGNK       ; GO TO FAILURE RETURN IF SO
 RANG3:   LDA    FREQ+1       ; IF FREQ AND DAMP ARE INDIVIDUALLY OK,
          BPL    RANG4        ; VERIFY THAT DAMP IS ACCEPTABLY HIGH IF
@@ -671,9 +677,9 @@ RANG3:   LDA    FREQ+1       ; IF FREQ AND DAMP ARE INDIVIDUALLY OK,
 RANG4:   CMP    #8
          BPL    RANGOK       ; GO TO SUCCESS RETURN IF FREQ IS HIGH
          LDA    DAMP+1       ; IF FREQ IS LOW, REQUIRE DAMP TO BE HIGH
-         CMP    #$7E
+         CMP    #$7E 
          BMI    RANGNK       ; GO TO FAILURE RETURN IF DAMP NOT HIGH
-                             ; ENOUGH WHEN FREQ IS LESS THAN X'10
+                             ; ENOUGH WHEN FREQ IS LESS THAN $10 
 RANGOK:  CLC                 ; CLEAR CARRY TO INDICATE SUCCESS
          RTS                 ; RETURN
 RANGNK:  SEC                 ; SET CARRY TO INDICATE FAILURE

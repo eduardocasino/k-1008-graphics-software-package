@@ -2,7 +2,47 @@
 
 ## Introduction
 
-This repository contains the manual facsimile, the sources in their original assembly format, listings and assembled programs that came with MTU's Graphics Software Package for the K-1008 "Visable" memory card for the KIM-1.
+This repository contains the manual facsimile, the sources in their original and 64tass assembly formats, listings and assembled programs that came with MTU's Graphics Software Package for the K-1008 "Visable" memory card for the KIM-1.
+
+This is a mix of OCR and manual typing, so there will probably be errors. Please contact me at "mail (AT) eduardocasino.es" if you detect any mistake.
+
+The manual, sources and listings should be exact copies of the originals, including errors, typos or grammatical errors. I do not intend to make any ammendments.
+
+## Contents
+
+```bash
+├── LICENSE.md
+├── README.md
+├── 64tass
+│   ├── Makefile
+│   ├── sdtxt.asm
+│   ├── swirl.asm
+│   ├── vmlif.asm
+│   └── vmsup.asm
+├── binaries
+│   ├── sdtxt.hex
+│   ├── sdtxt.pap
+│   ├── swirl.hex
+│   ├── swirl.pap
+│   ├── vmlif.hex
+│   ├── vmlif.pap
+│   ├── vmsup.hex
+│   └── vmsup.pap
+├── listings
+│   ├── sdtxt.lst
+│   ├── swirl.lst
+│   ├── vmlif.lst
+│   └── vmsup.lst
+├── manual
+│   ├── life_graphics.ods
+│   ├── manual.odt
+│   └── manual.pdf
+└── sources
+    ├── sdtxt.s
+    ├── swirl.s
+    ├── vmlif.s
+    └── vmsup.s
+```
 
 ## Licensing
 
@@ -10,6 +50,8 @@ Although it probably doesn't have any significance nowadays, as this software is
 
 See the original LICENSE.md file for details.
 
+I, Eduardo Casino, claim no ownership on the contents of this repository.
+
 ## Acknowledgements
 
-* Hans Otten and his [Retro Computing blog](http://retro.hansotten.nl/). Tons of information about the K-1008 card, including the Graphics Software Package
+* Hans Otten and his [Retro Computing blog](http://retro.hansotten.nl/). Tons of information about the K-1008 card, including the Graphics Software Package and thorough proofreading and testing.
