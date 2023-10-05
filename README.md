@@ -4,7 +4,7 @@
 
 This repository contains the manual facsimile, the sources in their original and 64tass assembly formats, listings and assembled programs (in Intel HEX and MOS Papertape formts) that came with MTU's Graphics Software Package for the K-1008 "Visable" memory card for the KIM-1.
 
-This is a mix of OCR and manual typing, so there will probably be errors. Please contact me at "mail (AT) eduardocasino.es" if you detect any mistake.
+This is a mix of OCR and manual typing, so there will probably be errors. Please open an issue if you detect any mistake.
 
 The manual, sources and listings should be exact copies of the originals, including bugs, typos or grammatical errors. I do not intend to make any ammendments.
 
