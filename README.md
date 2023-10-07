@@ -50,7 +50,7 @@ Although it probably doesn't have any significance nowadays, as this software is
 
 See the original LICENSE.md file for details.
 
-I, Eduardo Casino, claim no ownership on the contents of this repository.
+I claim no ownership on the contents of this repository.
 
 ## Acknowledgements
 
